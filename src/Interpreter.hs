@@ -7,7 +7,7 @@ import qualified Control.Arrow as A
 import Data.Bifunctor (bimap)
 
 import Stream
-import Syntax.Typed
+import Syntax.StateMachine.Typed
 
 ------------------------------------------------------------------------
 

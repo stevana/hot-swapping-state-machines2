@@ -3,9 +3,10 @@ module LibMain where
 import Data.Typeable
 import Data.IORef
 
-import Syntax.Typed
-import Syntax.Untyped
-import TypeChecker
+import Syntax.StateMachine.Typed
+import Syntax.StateMachine.Untyped
+import Syntax.Types
+import TypeCheck.StateMachine
 import Example.Counter
 import Interpreter
 

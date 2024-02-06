@@ -23,14 +23,18 @@ library
   import:           warnings
   exposed-modules:
     Classes
+    Deployment
     Example.Counter
     Interpreter
     LibMain
-    Pipeline
     Stream
-    Syntax.Typed
-    Syntax.Untyped
-    TypeChecker
+    Syntax.Pipeline.Typed
+    Syntax.Pipeline.Untyped
+    Syntax.StateMachine.Typed
+    Syntax.StateMachine.Untyped
+    Syntax.Types
+    TypeCheck.Pipeline
+    TypeCheck.StateMachine
 
   build-depends:
     , base      >=4.17.0.0

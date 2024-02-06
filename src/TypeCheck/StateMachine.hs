@@ -1,37 +1,21 @@
 {-# LANGUAGE GADTs #-}
 
-module TypeChecker where
+module TypeCheck.StateMachine where
 
 import Data.Type.Equality
-import Data.Typeable
 import Unsafe.Coerce
 
-import Syntax.Typed
-import Syntax.Untyped
+import Syntax.StateMachine.Typed
+import Syntax.StateMachine.Untyped
+import Syntax.Types
 
 ------------------------------------------------------------------------
-
-data ETy where
-  ETy :: Typeable a => Ty a -> ETy
 
 data TypeError = IdTE | ComposeTE | CopyTE | FstTE | SndTE | SecondTE | LoopTE | Distr'TE
   deriving Show
 
-------------------------------------------------------------------------
-
 throw :: TypeError -> Either TypeError a
 throw = Left
-
-------------------------------------------------------------------------
-
-inferTy :: Ty_ -> ETy
-inferTy UTUnit = ETy TUnit
-inferTy UTInt  = ETy TInt
-inferTy UTBool = ETy TBool
-inferTy (UTPair ua ub) = case (inferTy ua, inferTy ub) of
-  (ETy a, ETy b) -> ETy (TPair a b)
-inferTy (UTEither ua ub) = case (inferTy ua, inferTy ub) of
-  (ETy a, ETy b) -> ETy (TEither a b)
 
 ------------------------------------------------------------------------
 
@@ -88,7 +72,7 @@ typeCheck (LoopU us uf) a b = do
             _ -> throw LoopTE
         Right _ -> throw LoopTE
         Left err -> throw err
-typeCheck (DelayU (Opaque x)) a a' = do
+typeCheck (DelayU _ty (Opaque x)) a a' = do
   case testEquality a a' of
     Just Refl -> return (Delay (unsafeCoerce x))
     _ -> error ""
@@ -140,7 +124,7 @@ inferO SndU (TPair _a b) = return (EO b Snd)
 inferO (SecondU ug) (TPair a b) = do
   EO c g <- inferO ug b
   return (EO (TPair a c) (Second g))
-inferO (DelayU (Opaque x)) a = return (EO a (Delay (unsafeCoerce x)))
+inferO (DelayU _ty (Opaque x)) a = return (EO a (Delay (unsafeCoerce x)))
 inferO u t = error ("inferO: " ++ show (u, t))
 
 inferI :: U -> Ty b -> Either TypeError (EI b)
@@ -176,5 +160,5 @@ inferI DistrU (TEither (TPair a c) (TPair b c')) =
   case testEquality c c' of
     Just Refl -> return (EI (TPair (TEither a b) c) Distr)
     Nothing -> error ("inferI: DistrU: " ++ show (c, c'))
-inferI (DelayU (Opaque x)) a = return (EI a (Delay (unsafeCoerce x)))
+inferI (DelayU _ty (Opaque x)) a = return (EI a (Delay (unsafeCoerce x)))
 inferI u a  = error ("inferI:" ++ show (u, a))
