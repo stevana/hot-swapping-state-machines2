@@ -36,12 +36,12 @@ typeCheckP a b (SMU name sty_ us uf) =
     ETy (sty :: Ty s) -> do
       Witness <- inferTypeable sty
       s <- fromDynamic us :: Maybe s
-      case typeCheck uf a b of
+      case typeCheck uf sty a b of
         Left err -> error (show err)
         Right f -> do
           p <- inferRead a
           q <- inferShow b
-          return (EP p q (SM name s undefined))
+          return (EP p q (SM name s f))
 
 data EPO a where
   EPO :: Ty b -> P a b -> EPO a
@@ -58,8 +58,8 @@ inferOP a (uf :.>> ug) = do
   return (EPO c (f :>>> g))
 inferOP a (SMU name sty_ us uf) =
   case inferTy sty_ of
-    ETy (_sty :: Ty s) -> do
-      case inferO uf a of
+    ETy (sty :: Ty s) -> do
+      case inferO uf sty a of
         Right (EO b f) -> case fromDynamic us of
           Just (s :: s) -> return (EPO b (SM name s undefined))
           Nothing -> error "inferOP: SMU"
@@ -74,8 +74,8 @@ inferIP c (uf :.>> ug) = do
   return (EPI a (f :>>> g))
 inferIP b (SMU name sty_ us uf) =
   case inferTy sty_ of
-    ETy (_sty :: Ty s) -> do
-      case inferI uf b of
+    ETy (sty :: Ty s) -> do
+      case inferI uf sty b of
         Right (EI a f) -> case fromDynamic us of
           Just (s :: s) -> return (EPI a (SM name s undefined))
           Nothing -> error "inferIP: SMU"

@@ -25,6 +25,7 @@ data Ty a where
   TUnit   :: Ty ()
   TInt    :: Ty Int
   TBool   :: Ty Bool
+  TString :: Ty String
   TPair   :: Ty a -> Ty b -> Ty (a, b)
   TEither :: Ty a -> Ty b -> Ty (Either a b)
   TDon'tCare :: Ty a
@@ -34,6 +35,7 @@ instance TestEquality Ty where
   testEquality TUnit TUnit = Just Refl
   testEquality TInt  TInt = Just Refl
   testEquality TBool TBool = Just Refl
+  testEquality TString TString = Just Refl
   testEquality (TPair l r) (TPair l' r') = case (testEquality l l', testEquality r r') of
     (Just Refl, Just Refl) -> Just Refl
     _ -> Nothing

@@ -14,6 +14,8 @@ import Syntax.Types
 import TypeCheck.Pipeline
 import Syntax.Pipeline.Untyped
 import Syntax.Pipeline.Typed
+import Syntax.StateMachine.Typed
+import Interpreter
 
 ------------------------------------------------------------------------
 
@@ -35,20 +37,22 @@ writeQueue q x = atomically (writeTBQueue q x)
 data Msg a where
   Item    :: a -> Msg a
   Upgrade :: (Typeable s, Typeable s', Typeable i, Typeable o)
-          => Name -> SM s' i o -> (s -> s') -> Msg a
+          => Name -> T s' i o -> Maybe (s -> s') -> Msg a
   UpgradeSucceeded :: Name -> Msg a
   UpgradeFailed :: Name -> Msg a
 
-  UpgradePipeline :: Ty_ -> Ty_ -> UP -> Msg a
+  UpgradePipeline_ :: Ty_ -> Ty_ -> UP -> Msg a
+  UpgradePipeline :: P String String -> Msg String
 
   Done :: Msg a
 
 instance Show a => Show (Msg a) where
-  show (Item x) = show x
+  show (Item x) = "Item " ++ show x
   show (Upgrade name _sm _g) = "Upgrade " ++ name
   show (UpgradeSucceeded name) = "UpgradeSucceeded " ++ name
   show (UpgradeFailed name) = "UpgradeFailed " ++ name
-  show (UpgradePipeline ua ub up) = "UpgradePipeline " ++ show ua ++ " " ++ show ub ++ " " ++ show up
+  show (UpgradePipeline_ ua ub up) = "UpgradePipeline_ " ++ show ua ++ " " ++ show ub ++ " " ++ show up
+  show (UpgradePipeline {}) = "UpgradePipeline {}"
   show Done = "Done"
 
 instance Read a => Read (Msg a) where
@@ -58,8 +62,8 @@ instance Read a => Read (Msg a) where
         Ident "Item" <- lexP
         Item <$> readPrec
       upgradePipelineP = do
-        Ident "UpgradePipeline" <- lexP
-        UpgradePipeline <$> readPrec <*> readPrec <*> readPrec
+        Ident "UpgradePipeline_" <- lexP
+        UpgradePipeline_ <$> readPrec <*> readPrec <*> parens readPrec
 
 deploy :: forall a b. (Typeable a, Typeable b)
        => P a b -> Queue (Msg a) -> IO (Queue (Msg b))
@@ -67,22 +71,24 @@ deploy IdP             q = return q
 deploy (f :>>> g)      q = deploy g =<< deploy f q
 deploy (SM name s0 f0) q = do
   q' <- newQueue
-  let go :: Typeable s => s -> SM s a b -> IO ()
+  let go :: Typeable s => s -> T s a b -> IO ()
       go s f = do
         m <- readQueue q
         case m of
           Item i  -> do
-            let (s', o) = f i s
+            let (o, s') = runT f i s
             writeQueue q' (Item o)
             go s' f
-          Upgrade name' f' g
+          Upgrade name' f' mg
             | name /= name' -> do
-                writeQueue q' (Upgrade name' f' g)
+                writeQueue q' (Upgrade name' f' mg)
                 go s f
             | otherwise -> case (cast f', cast s) of
-                             (Just f'', Just s') -> do
+                             (Just (f'' :: T s a b), Just s') -> do
                                writeQueue q' (UpgradeSucceeded name)
-                               go (g s') f''
+                               case mg of
+                                 Nothing -> go s f''
+                                 Just g  -> go (g s') undefined
                              _ -> do
                                writeQueue q' (UpgradeFailed name)
                                go s f
@@ -95,22 +101,10 @@ deploy (SM name s0 f0) q = do
           Done -> do
             writeQueue q' Done
             return ()
-          UpgradePipeline {} -> error "deploy, impossible, handled upsteam"
+          UpgradePipeline {} -> error "deploy, impossible, handled upsteam in `run`"
+          UpgradePipeline_ {} -> error "deploy, impossible, handled upsteam in `run`"
   _pid <- forkIO (go s0 f0)
   return q'
-
-data Input = ReadCount | IncrCount
-  deriving Read
-data Output = Count Int | Ok
-  deriving Show
-
-counter :: Input  -> Int -> (Int, Output)
-counter ReadCount n = (n, Count n)
-counter IncrCount n = (n + 1, Ok)
-
-counter2 :: Input  -> (Int, Int) -> ((Int, Int), Output)
-counter2 ReadCount (old, new) = ((old, new), Count new)
-counter2 IncrCount (old, new) = ((old, new + 2), Ok)
 
 ------------------------------------------------------------------------
 
@@ -130,19 +124,28 @@ run (FromList xs) p ToList = do
   q' <- deploy p q
   mapM_ (writeQueue q) xs
   replicateM (length xs) (readQueue q')
-run (FromList xs) p StdOut = do
+run (FromList xs0) p StdOut = do
   q <- newQueue
-  mapM_ (writeQueue q) xs
   q' <- deploy p q
-  ys <- replicateM (length xs) (readQueue q')
-  mapM_ print ys
+  let go [] = return ()
+      go (x : xs) = do
+        case x of
+          UpgradePipeline p' -> do
+            putStrLn "<Upgraded pipeline>"
+            run (FromList xs) p' StdOut
+          _otherwise -> do
+            writeQueue q x
+            y <- readQueue q'
+            print y
+            go xs
+  go xs0
 run StdIn p StdOut = do
   q <- newQueue
   q' <- deploy p q
   let go = do
         l <- getLine
         case readMaybe l of
-          Just (UpgradePipeline ua' ub' up') -> do
+          Just (UpgradePipeline_ ua' ub' up') -> do
             case (inferTy ua', inferTy ub') of
               (ETy a', ETy b') ->
                 case typeCheckP a' b' up' of
@@ -158,24 +161,6 @@ run StdIn p StdOut = do
           Nothing -> putStrLn "<Parse error>" >> go
   go
 run StdIn _p ToList = undefined
-
-------------------------------------------------------------------------
-
-test :: IO [Msg Output]
-test = run (FromList xs) (SM "counter" 0 counter) ToList
-  where
-    xs =
-      [ Item ReadCount
-      , Item IncrCount
-      , Item IncrCount
-      , Item ReadCount
-      , Upgrade "counter" counter2 (\n -> (n, n))
-      , Item ReadCount
-      , Item IncrCount
-      , Item ReadCount
-      ]
--- >>> test
--- [Count 0,Ok,Ok,Count 2,UpgradeSucceeded counter,Count 2,Ok,Count 4]
 
 ------------------------------------------------------------------------
 

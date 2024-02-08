@@ -1,55 +1,31 @@
 module LibMain where
 
-import Data.Typeable
-import Data.IORef
-
-import Syntax.StateMachine.Typed
-import Syntax.StateMachine.Untyped
-import Syntax.Types
-import TypeCheck.StateMachine
+import Deployment
 import Example.Counter
-import Interpreter
+import Syntax.Pipeline.Typed
 
 ------------------------------------------------------------------------
 
-data Ref a b = Ref (IORef (T a b, [a]))
-
-spawn :: T a b -> IO (Ref a b)
-spawn f = Ref <$> newIORef (f, [])
-
-send :: Ref a b -> a -> IO b
-send (Ref r) x = do
-  (f, xs) <- readIORef r
-  let xs' = xs ++ [x]
-  writeIORef r (f, xs')
-  return (last (run f xs'))
-
-upgrade :: Ref a b -> T a b -> IO ()
-upgrade (Ref r) f' = do
-  (_f, xs) <- readIORef r
-  writeIORef r (f', xs)
-
-spawn_ :: (Typeable a, Typeable b) => Ty_ -> Ty_ -> U -> IO (Ref a b)
-spawn_ ua ub uf = case (inferTy ua, inferTy ub) of
-  (ETy a', ETy b') -> case (cast a', cast b') of
-    (Just a, Just b) -> case typeCheck uf a b of
-      Right f -> spawn f
-      Left err -> error ("spawn_: typecheck error: " ++ show err)
-    _ -> error "spawn_: type cast error"
-
-------------------------------------------------------------------------
-
-main :: IO ()
-main = do
-  r <- spawn_ (UTEither UTUnit UTUnit) (UTEither UTInt UTUnit) tcounterU :: IO (Ref (Either () ()) (Either Int ()))
-  _ <- send r incrCount
-  c <- send r readCount
-  print c
-  _ <- send r incrCount
-  _ <- send r incrCount
-  c' <- send r readCount
-  print c'
-
--- >>> main
--- Left 1
--- Left 3
+test :: IO ()
+test = run (FromList xs) (SM "counter" 0 counterV1) StdOut
+  where
+    xs :: [Msg String]
+    xs =
+      [ Item (show ReadCountV1)
+      , Item (show IncrCountV1)
+      , Item (show IncrCountV1)
+      , Item (show ReadCountV1)
+      , Upgrade "counter" counterV2 (Nothing :: Maybe (Int -> Int))
+      , Item (show ReadCountV2)
+      , Item (show ResetCountV2)
+      , Item (show ReadCountV2)
+      ]
+-- >>> test
+-- Item "Left 0"
+-- Item "Right ()"
+-- Item "Right ()"
+-- Item "Left 2"
+-- UpgradeSucceeded counter
+-- Item "Left (Left 2)"
+-- Item "Right ()"
+-- Item "Left (Left 0)"

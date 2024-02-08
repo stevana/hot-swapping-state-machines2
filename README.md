@@ -15,6 +15,8 @@ This post builds upon ideas form two previous posts, but can be read on its own.
 
 * Deployed software needs to be upgraded
 * No downtime
+* Typed state migrations
+* Backwards and forwards compatbility?
 
 ## Plan
 
@@ -47,9 +49,20 @@ This post builds upon ideas form two previous posts, but can be read on its own.
 
 ### Remote upgrades
 
+## A bit of theory
+
+* Upgrades of from arbitrary program to arbitrary program is too messy
+
+* Abstract state machine, model of computation that allows us to express the
+  problem at the right level of abstration
+
+* Refinement of state machines gives us a model of updates, perhaps even clearer
+  when looking at indexed containers and their morphisms?
+
 ## Future work
 
 - [ ] Upgrade pipelines, rather than state machines running in the pipelines;
+- [ ] Better language for describing state machines?
 
 
 ## Contributing

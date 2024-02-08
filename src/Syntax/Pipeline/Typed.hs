@@ -4,13 +4,15 @@ module Syntax.Pipeline.Typed where
 
 import Data.Typeable
 
-------------------------------------------------------------------------
+import Syntax.StateMachine.Typed
 
-type SM s i o = i -> s -> (s, o)
+------------------------------------------------------------------------
 
 data P a b where
   IdP    :: P a a
   (:>>>) :: Typeable b => P a b -> P b c -> P a c
-  SM     :: Typeable s => Name -> s -> SM s a b -> P a b
+  SM     :: Typeable s => Name -> s -> T s a b -> P a b
+  -- Module    :: Name -> P a b -> P a b
+  -- ^ So we can upgrade bigger parts of the pipeline?!
 
 type Name = String

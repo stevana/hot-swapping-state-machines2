@@ -38,6 +38,8 @@ data U
   | (:.&&) U U
   | IncrU
   | ConsumeU
+  | GetU
+  | PutU
   deriving Show
 
 instance Read U where
@@ -55,6 +57,8 @@ instance Read U where
     , ("DelayU",   delayP)
     , ("IncrU",    return IncrU)
     , ("ConsumeU", return ConsumeU)
+    , ("GetU",     return GetU)
+    , ("PutU",     return PutU)
     ] <|> choiceP <|> fanoutP
     where
       delayP = do

@@ -29,5 +29,5 @@ instance Read UP where
             case inferRead sty of
               Just Witness -> do
                 (s :: s) <- readPrec
-                f <- readPrec
+                f <- parens readPrec
                 return (SMU name sty_ (toDyn s) f)
