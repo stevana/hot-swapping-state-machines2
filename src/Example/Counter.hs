@@ -79,3 +79,8 @@ counter2 ReadCount (old, new) = ((old, new), Count new)
 counter2 IncrCount (old, new) = ((old, new + 2), Ok)
 
 -}
+
+------------------------------------------------------------------------
+
+-- XXX: V3 add bool to state, if bool is true then incr decrements, also add
+-- command that allows for bool to be flipped.

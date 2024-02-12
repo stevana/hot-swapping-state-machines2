@@ -3,22 +3,26 @@ module LibMain where
 import Deployment
 import Example.Counter
 import Syntax.Pipeline.Typed
+import Message
+import Codec
 
 ------------------------------------------------------------------------
 
 test :: IO ()
-test = run (FromList xs) (SM "counter" 0 counterV1) StdOut
+test = do
+  print xs
+  run' (FromTCP' 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP' -- Stdout'
   where
     xs :: [Msg String]
     xs =
-      [ Item (show ReadCountV1)
-      , Item (show IncrCountV1)
-      , Item (show IncrCountV1)
-      , Item (show ReadCountV1)
-      , Upgrade "counter" counterV2 (Nothing :: Maybe (Int -> Int))
-      , Item (show ReadCountV2)
-      , Item (show ResetCountV2)
-      , Item (show ReadCountV2)
+      [ Item Nothing (show ReadCountV1)
+      , Item Nothing (show IncrCountV1)
+      , Item Nothing (show IncrCountV1)
+      , Item Nothing (show ReadCountV1)
+      , Upgrade Nothing "counter" counterV2 (Nothing :: Maybe (Int -> Int))
+      , Item Nothing (show ReadCountV2)
+      , Item Nothing (show ResetCountV2)
+      , Item Nothing (show ReadCountV2)
       ]
 -- >>> test
 -- Item "Left 0"

@@ -23,23 +23,30 @@ library
   import:           warnings
   exposed-modules:
     Classes
+    Codec
     Deployment
     Example.Counter
     Interpreter
     LibMain
+    Message
+    Queue
     Stream
     Syntax.Pipeline.Typed
     Syntax.Pipeline.Untyped
     Syntax.StateMachine.Typed
     Syntax.StateMachine.Untyped
     Syntax.Types
+    TCP
     TypeCheck.Pipeline
     TypeCheck.StateMachine
+    Utils
 
   build-depends:
-    , base      >=4.17.0.0
+    , base        >=4.17.0.0
+    , bytestring
     , ghc-prim
     , mtl
+    , network
     , stm
 
   hs-source-dirs:   src

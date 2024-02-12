@@ -15,4 +15,6 @@ data P a b where
   -- Module    :: Name -> P a b -> P a b
   -- ^ So we can upgrade bigger parts of the pipeline?!
 
+  -- Tee :: P a ByteString -> Sink -> P a a?
+
 type Name = String
