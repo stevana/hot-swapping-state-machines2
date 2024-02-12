@@ -63,6 +63,7 @@ This post builds upon ideas form two previous posts, but can be read on its own.
 
 - [ ] Upgrade pipelines, rather than state machines running in the pipelines;
 - [ ] Better language for describing state machines?
+- [ ] Content-addressed hashes?
 
 
 ## Contributing

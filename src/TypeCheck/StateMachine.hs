@@ -3,7 +3,6 @@
 module TypeCheck.StateMachine where
 
 import Data.Type.Equality
-import Unsafe.Coerce
 
 import Syntax.StateMachine.Typed
 import Syntax.StateMachine.Untyped
@@ -12,6 +11,7 @@ import Syntax.Types
 ------------------------------------------------------------------------
 
 data TypeError = IdTE | ComposeTE | CopyTE | FstTE | SndTE | SecondTE | LoopTE | Distr'TE
+  | GetTE | PutTE
   deriving Show
 
 throw :: TypeError -> Either TypeError a
@@ -20,10 +20,9 @@ throw = Left
 ------------------------------------------------------------------------
 
 typeCheck :: U -> Ty s -> Ty a -> Ty b -> Either TypeError (T s a b)
-typeCheck = undefined
-  {-
-typeCheck IdU _s TInt  TInt  = return Id
 typeCheck IdU _s TBool TBool = return Id
+typeCheck IdU _s TInt  TInt  = return Id
+typeCheck IdU _s TString TString  = return Id
 typeCheck IdU _s (TEither a b) (TEither a' b') =
   case (testEquality a a', testEquality b b') of
     (Just Refl, Just Refl) -> return Id
@@ -33,9 +32,9 @@ typeCheck IdU _s (TPair a b) (TPair a' b') =
     (Just Refl, Just Refl) -> return Id
     _ -> error "typeCheck: IdU Pair"
 typeCheck IdU _ _ _ = throw IdTE
-typeCheck (ComposeU ug uf) _s a c = do
-  EI b  g <- inferI ug c
-  EO b' f <- inferO uf a
+typeCheck (ComposeU ug uf) s a c = do
+  EI b  g <- inferI ug s c
+  EO b' f <- inferO uf s a
   case testEquality b b' of
     Just Refl -> return (Compose g f)
     _ -> throw ComposeTE
@@ -52,50 +51,37 @@ typeCheck CopyU _ a (TPair a' a'') = do
   case (testEquality a a', testEquality a a'') of
     (Just Refl, Just Refl) -> return Copy
     _ -> throw CopyTE
+typeCheck GetU s TUnit s' = case testEquality s s' of
+  Just Refl -> return Get
+  Nothing -> throw GetTE
+typeCheck PutU s s' TUnit = case testEquality s s' of
+  Just Refl -> return Put
+  Nothing -> throw PutTE
 typeCheck ConsumeU _s _a TUnit = return Consume
 typeCheck IncrU _s TInt TInt = return Incr
-typeCheck (SecondU ug) _s (TPair a b) (TPair a' c) = do
+typeCheck (SecondU ug) s (TPair a b) (TPair a' c) = do
   case testEquality a a' of
     Just Refl -> do
-      EI b' g <- inferI ug c
+      EI b' g <- inferI ug s c
       case testEquality b b' of
         Just Refl -> return (Second g)
         _ -> error ""
     _ -> error ""
-typeCheck (LoopU us uf) _s a b = do
-  case inferTy us of
-    ETy s ->
-      case inferI uf (TPair b s) of
-        Right (EI (TPair a' s') _) -> do
-          case (testEquality a a', testEquality s s') of
-            (Just Refl, Just Refl) -> do
-              f <- typeCheck uf (TPair a s) (TPair b s)
-              return (Loop f)
-            _ -> throw LoopTE
-        Right _ -> throw LoopTE
-        Left err -> throw err
-typeCheck (DelayU _ty (Opaque x)) a a' = do
-  case testEquality a a' of
-    Just Refl -> return (Delay (unsafeCoerce x))
-    _ -> error ""
-typeCheck (uf :.&& ug) a (TPair b c) = do
-  f <- typeCheck uf a b
-  g <- typeCheck ug a c
+typeCheck (uf :.&& ug) s a (TPair b c) = do
+  f <- typeCheck uf s a b
+  g <- typeCheck ug s a c
   return (f :&&& g)
-typeCheck (uf :.++ ug) (TEither a b) (TEither c d) = do
-  f <- typeCheck uf a c
-  g <- typeCheck ug b d
+typeCheck (uf :.++ ug) s (TEither a b) (TEither c d) = do
+  f <- typeCheck uf s a c
+  g <- typeCheck ug s b d
   return (f :+++ g)
-typeCheck DistrU (TPair (TEither a b) c) (TEither (TPair a' c') (TPair b' c'')) =
-  case (testEquality a a', testEquality b b', testEquality c c', testEquality c' c'') of
-    (Just Refl, Just Refl, Just Refl, Just Refl) -> return Distr
-    _ -> error ""
-typeCheck DistrU' (TEither (TPair a c) (TPair b c')) (TPair (TEither a' b') c'') =
-  case (testEquality a a', testEquality b b', testEquality c c', testEquality c' c'') of
-    (Just Refl, Just Refl, Just Refl, Just Refl) -> return Distr'
-    _ -> error "typeCheck: DistrU'"
-typeCheck u a b = error (show (u, a, b))
--}
+typeCheck (ReadU _ua) _s TString a =
+  case inferRead a of
+    Just Witness -> return Read
+typeCheck (ShowU _ua) _s a TString =
+  case inferShow a of
+    Just Witness -> return Show
+typeCheck u s a b = error (show (u, s, a, b))
 
 ------------------------------------------------------------------------
 
@@ -116,59 +102,58 @@ data EI s b where
   EI :: Ty a -> T s a b -> EI s b
 
 inferO :: U -> Ty s -> Ty a -> Either TypeError (EO s a)
-inferO = undefined
-{-
-inferO IdU TInt  = return (EO TInt Id)
-inferO IdU TBool = return (EO TBool Id)
-inferO (ComposeU ug uf) a = do
-  EO b f <- inferO uf a
-  EO c g <- inferO ug b
+inferO IdU _s TInt  = return (EO TInt Id)
+inferO IdU _s TBool = return (EO TBool Id)
+inferO (ComposeU ug uf) s a = do
+  EO b f <- inferO uf s a
+  EO c g <- inferO ug s b
   return (EO c (Compose g f))
-inferO FstU (TPair a _b) = return (EO a Fst)
-inferO SndU (TPair _a b) = return (EO b Snd)
-inferO (SecondU ug) (TPair a b) = do
-  EO c g <- inferO ug b
+inferO FstU _s (TPair a _b) = return (EO a Fst)
+inferO SndU _s (TPair _a b) = return (EO b Snd)
+inferO (SecondU ug) s (TPair a b) = do
+  EO c g <- inferO ug s b
   return (EO (TPair a c) (Second g))
-inferO (DelayU _ty (Opaque x)) a = return (EO a (Delay (unsafeCoerce x)))
-inferO u t = error ("inferO: " ++ show (u, t))
--}
+inferO (ReadU ua) _s TString = do
+  case inferTy ua of
+    ETy a -> case inferRead a of
+      Just Witness -> return (EO a Read)
+inferO u s t = error ("inferO: " ++ show (u, s, t))
 
 inferI :: U -> Ty s -> Ty b -> Either TypeError (EI s b)
-inferI = undefined
-{-
-inferI IdU a  = return (EI a Id)
-inferI (ComposeU ug uf) c = do
-  EI b g <- inferI ug c
-  EI a f <- inferI uf b
+inferI IdU _s a  = return (EI a Id)
+inferI (ComposeU ug uf) s c = do
+  EI b g <- inferI ug s c
+  EI a f <- inferI uf s b
   return (EI a (Compose g f))
-inferI FstU a = return (EI (TPair a TDon'tCare) Fst)
-inferI (SecondU ug) (TPair a c) = do
-  EI b g <- inferI ug c
+inferI FstU _s a = return (EI (TPair a TDon'tCare) Fst)
+inferI (SecondU ug) s (TPair a c) = do
+  EI b g <- inferI ug s c
   return (EI (TPair a b) (Second g))
-inferI (SecondU _ug) _ = throw SecondTE
-inferI DistrU' (TPair (TEither a b) c) = return (EI (TEither (TPair a c) (TPair b c)) Distr')
-inferI (uf :.++ ug) (TEither c d) = do
-  EI a f <- inferI uf c
-  EI b g <- inferI ug d
+inferI (SecondU _ug) _s _ = throw SecondTE
+inferI (uf :.++ ug) s (TEither c d) = do
+  EI a f <- inferI uf s c
+  EI b g <- inferI ug s d
   return (EI (TEither a b) (f :+++ g))
-inferI (uf :.&& ug) (TPair b c) = do
-  EI a  f <- inferI uf b
-  EI a' g <- inferI ug c
+inferI (uf :.&& ug) s (TPair b c) = do
+  EI a  f <- inferI uf s b
+  EI a' g <- inferI ug s c
   case testEquality a a' of
     Just Refl -> return (EI a (f :&&& g))
     Nothing -> error $ "&&&: " ++ show (a, a')
-inferI CopyU (TPair a a') =
+inferI CopyU _s (TPair a a') =
   case testEquality a a' of
     Just Refl -> return (EI a Copy)
     Nothing -> error "copy"
-inferI SndU a = return (EI (TPair TDon'tCare a) Snd)
-inferI ConsumeU TUnit = return (EI TDon'tCare Consume)
-inferI IncrU TInt = return (EI TInt Incr)
-inferI DistrU (TEither (TPair a c) (TPair b c')) =
-  case testEquality c c' of
-    Just Refl -> return (EI (TPair (TEither a b) c) Distr)
-    Nothing -> error ("inferI: DistrU: " ++ show (c, c'))
-inferI (DelayU _ty (Opaque x)) a = return (EI a (Delay (unsafeCoerce x)))
-inferI u a  = error ("inferI:" ++ show (u, a))
-
--}
+inferI SndU _s a = return (EI (TPair TDon'tCare a) Snd)
+inferI ConsumeU _s TUnit = return (EI TDon'tCare Consume)
+inferI IncrU _s TInt = return (EI TInt Incr)
+inferI (ShowU ua) _s TString = do
+  case inferTy ua of
+    ETy a -> case inferShow a of
+      Just Witness -> return (EI a Show)
+inferI GetU s s' = case testEquality s s' of
+   Just Refl -> return (EI TUnit Get)
+   Nothing -> error $ "inferI: GetU: s=" ++ show s ++ ", s'= " ++ show s'
+inferI PutU s TUnit = return (EI s Put)
+inferI (IntU i) _s TInt = return (EI TUnit (Int i))
+inferI u s a  = error ("inferI:" ++ show (u, s, a))

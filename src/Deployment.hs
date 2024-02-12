@@ -1,26 +1,26 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Deployment where
 
 import Control.Concurrent
-import Control.Monad
-import Data.Typeable
 import qualified Data.ByteString.Char8 as BS8
-import Network.Socket
-import Text.Read
+import Data.Typeable
 import System.IO
 
+import Codec
 import Interpreter
+import Message
 import Queue
 import Syntax.Pipeline.Typed
 import Syntax.StateMachine.Typed
+import Syntax.StateMachine.Untyped
 import Syntax.Types
-import TypeCheck.Pipeline
 import TCP
+import TypeCheck.Pipeline
+import TypeCheck.StateMachine
 import Utils
-import Codec
-import Message
 
 ------------------------------------------------------------------------
 
@@ -110,24 +110,65 @@ deploy (SM name s0 f0) q = do
                 go s f
             | otherwise -> case (cast f', cast s) of
                              (Just (f'' :: T s a b), Just s') -> do
-                               writeQueue q' (UpgradeSucceeded name)
+                               writeQueue q' (UpgradeSucceeded Nothing name)
                                case mg of
                                  Nothing -> go s f''
                                  Just g  -> go (g s') undefined
                              _ -> do
-                               writeQueue q' (UpgradeFailed name)
+                               writeQueue q' (UpgradeFailed Nothing name)
                                go s f
-          UpgradeSucceeded name' -> do
-            writeQueue q' (UpgradeSucceeded name')
+          Upgrade_ msock name' sty sty' a' b' f' mg -> do
+            case tryUpgrade s f (UpgradeD_ sty sty' a' b' f' mg) of
+              Just (SameState f') -> do
+                writeQueue q' (UpgradeSucceeded msock name)
+                go s f'
+              Just (DifferentState g f') -> do
+                writeQueue q' (UpgradeSucceeded msock name)
+                let (_, s') = runT g s ()
+                go s' f'
+              Nothing -> do
+                writeQueue q' (UpgradeFailed msock name)
+                go s f
+          UpgradeSucceeded msock name' -> do
+            writeQueue q' (UpgradeSucceeded msock name')
             go s f
-          UpgradeFailed name' -> do
-            writeQueue q' (UpgradeFailed name')
+          UpgradeFailed msock name' -> do
+            writeQueue q' (UpgradeFailed msock name')
             go s f
           Done -> do
             writeQueue q' Done
             return ()
   _pid <- forkIO (go s0 f0)
   return q'
+
+------------------------------------------------------------------------
+
+data UpgradeD_ = UpgradeD_ Ty_ Ty_ Ty_ Ty_ U U
+
+data UpgradeD s s' a b where
+  SameState :: T s a b -> UpgradeD s s' a b
+  DifferentState :: T () s s' -> T s' a b -> UpgradeD s s' a b
+
+tryUpgrade :: forall s s' a b. (Typeable s, Typeable s', Typeable a, Typeable b)
+           => s -> T s a b -> UpgradeD_ -> Maybe (UpgradeD s s' a b)
+tryUpgrade _s f (UpgradeD_ t_ t'_ a'_ b'_ f' g) = do
+  case (inferTy t_, inferTy t'_, inferTy a'_, inferTy b'_) of
+    (ETy (t :: Ty t), ETy (t' :: Ty t'), ETy (a' :: Ty a'), ETy (b' :: Ty b')) ->
+      case (eqT @a @a', eqT @b @b', eqT @s @t) of
+        (Just Refl, Just Refl, Just Refl) ->
+          case typeCheck f' t a' b' of
+            Right ff -> Just (SameState ff)
+            Left err -> error (show err)
+        _ -> error "tryUpdate"
+
+              -- case (eqT @s @t, eqT @s' @t') of
+              -- (Just Refl, Just Refl) -> case eqT @s @s' of
+--                Just Refl -> Just (SameState ff)
+--                Nothing -> case typeCheck g TUnit t t' of
+--                  Right (gg :: T () s s') -> Just (DifferentState gg ff)
+--                  Left err -> error (show err)
+--              _ -> error "s /= s'"
+--            Left err -> error (show err)
 
 ------------------------------------------------------------------------
 

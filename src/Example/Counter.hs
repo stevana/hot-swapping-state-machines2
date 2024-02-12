@@ -4,6 +4,7 @@ module Example.Counter where
 
 import Syntax.StateMachine.Typed
 import Syntax.StateMachine.Untyped
+import Syntax.Types
 
 ------------------------------------------------------------------------
 
@@ -23,17 +24,23 @@ counterV1 = -- Loop (Second (Delay 0) >>>
   -- Distr >>> ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& Incr))) >>> Distr'
   Read >>> (Get :+++ (Get >>> Incr >>> Put)) >>> Show
 
+inputV1 :: Ty_
+inputV1 = UTEither UTUnit UTUnit
+
+outputV1 :: Ty_
+outputV1 = UTEither UTInt UTUnit
+
 counterV1U :: U
 counterV1U = -- LoopU UTInt $ SecondU (DelayU UTInt (Opaque (unsafeCoerce 0))) .>>
   -- DistrU .>>
   -- ((SndU .>> CopyU) :.++ (SndU .>> (ConsumeU :.&& IncrU)))
   -- .>> DistrU'
-  GetU :.++ (GetU .>> IncrU .>> PutU)
+  ReadU inputV1 .>> (GetU :.++ (GetU .>> IncrU .>> PutU)) .>> ShowU outputV1
 
 ------------------------------------------------------------------------
 
-type InputV2  = Either InputV1 ()
-type OutputV2 = Either OutputV1 ()
+type InputV2  = Either () InputV1
+type OutputV2 = Either () OutputV1
 
 counterV2 :: T Int String String
 counterV2 = -- Loop $ Second (Delay 0) >>>
@@ -43,17 +50,23 @@ counterV2 = -- Loop $ Second (Delay 0) >>>
   (Read :: T Int String InputV2) >>> (Get :+++ (Get >>> Incr >>> Put) :+++ (Int 0 >>> Put)) >>> Show
 
 pattern ReadCountV2 :: InputV2
-pattern ReadCountV2  = Left (Left ())
+pattern ReadCountV2  = Left ()
 
 pattern IncrCountV2 :: InputV2
-pattern IncrCountV2  = Left (Right ())
+pattern IncrCountV2  = Right (Left ())
 
 pattern ResetCountV2 :: InputV2
-pattern ResetCountV2 = Right ()
+pattern ResetCountV2 = Right (Right ())
+
+inputV2 :: Ty_
+inputV2 = UTEither UTUnit (UTEither UTUnit UTUnit)
+
+outputV2 :: Ty_
+outputV2 = UTEither UTInt (UTEither UTUnit UTUnit)
 
 counterV2U :: U
 counterV2U =
-  GetU :.++ (GetU .>> IncrU .>> PutU) :.++ (IntU 0 .>> PutU)
+  ReadU inputV2 .>> (GetU :.++ (GetU .>> IncrU .>> PutU) :.++ (IntU 0 .>> PutU)) .>> ShowU outputV2
 
   {-
 distr2 :: T (Either (Either a b) c, d) (Either (Either (a, d) (b, d)) (c, d))

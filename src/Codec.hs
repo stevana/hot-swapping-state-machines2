@@ -16,7 +16,7 @@ data DecodeError = DecodeError String
   deriving Show
 
 displayDecodeError :: DecodeError -> String
-displayDecodeError = undefined
+displayDecodeError (DecodeError s) = s
 
 data Codec a b = Codec
   { decode :: ByteString -> Either DecodeError a

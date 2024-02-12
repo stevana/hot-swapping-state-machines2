@@ -3,6 +3,8 @@ module LibMain where
 import Deployment
 import Example.Counter
 import Syntax.Pipeline.Typed
+import Syntax.StateMachine.Untyped
+import Syntax.Types
 import Message
 import Codec
 
@@ -19,7 +21,8 @@ test = do
       , Item Nothing (show IncrCountV1)
       , Item Nothing (show IncrCountV1)
       , Item Nothing (show ReadCountV1)
-      , Upgrade Nothing "counter" counterV2 (Nothing :: Maybe (Int -> Int))
+      -- , Upgrade Nothing "counter" counterV2 (Nothing :: Maybe (Int -> Int))
+      , Upgrade_ Nothing "counter" UTInt UTInt UTString UTString counterV2U IdU
       , Item Nothing (show ReadCountV2)
       , Item Nothing (show ResetCountV2)
       , Item Nothing (show ReadCountV2)

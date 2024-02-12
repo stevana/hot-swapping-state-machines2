@@ -15,6 +15,7 @@ data Ty_
   = UTUnit
   | UTInt
   | UTBool
+  | UTString
   | UTPair Ty_ Ty_
   | UTEither Ty_ Ty_
   deriving (Show, Read)
@@ -55,6 +56,7 @@ inferTy :: Ty_ -> ETy
 inferTy UTUnit = ETy TUnit
 inferTy UTInt  = ETy TInt
 inferTy UTBool = ETy TBool
+inferTy UTString = ETy TString
 inferTy (UTPair ua ub) = case (inferTy ua, inferTy ub) of
   (ETy a, ETy b) -> ETy (TPair a b)
 inferTy (UTEither ua ub) = case (inferTy ua, inferTy ub) of
@@ -69,6 +71,7 @@ inferShow :: Ty a -> Maybe (Proof (Show a))
 inferShow TUnit = return Witness
 inferShow TBool = return Witness
 inferShow TInt = return Witness
+inferShow TString = return Witness
 inferShow (TPair a b) = do
   Witness <- inferShow a
   Witness <- inferShow b
@@ -83,6 +86,7 @@ inferRead :: Ty a -> Maybe (Proof (Read a))
 inferRead TUnit = return Witness
 inferRead TBool = return Witness
 inferRead TInt = return Witness
+inferRead TString = return Witness
 inferRead (TPair a b) = do
   Witness <- inferRead a
   Witness <- inferRead b
@@ -97,6 +101,7 @@ inferTypeable :: Ty a -> Maybe (Proof (Typeable a))
 inferTypeable TUnit = return Witness
 inferTypeable TBool = return Witness
 inferTypeable TInt = return Witness
+inferTypeable TString = return Witness
 inferTypeable (TPair a b) = do
   Witness <- inferTypeable a
   Witness <- inferTypeable b

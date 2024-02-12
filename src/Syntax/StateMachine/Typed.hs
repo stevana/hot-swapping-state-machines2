@@ -4,6 +4,8 @@ module Syntax.StateMachine.Typed where
 
 ------------------------------------------------------------------------
 
+infixr 2 :+++
+
 data T s a b where
   Id      :: T s a a
   Compose :: T s b c -> T s a b -> T s a c
@@ -11,7 +13,7 @@ data T s a b where
   Snd     :: T s (a, b) b
   Copy    :: T s a (a, a)
   Consume :: T s a ()
-  Int     :: Int -> T s a Int
+  Int     :: Int -> T s () Int
   Incr    :: T s Int Int
   Get     :: T s () s
   Put     :: T s s ()
@@ -26,7 +28,6 @@ data T s a b where
   Distr'  :: T s (Either (a, c) (b, c)) (Either a b, c)
   Read    :: Read a => T s String a
   Show    :: Show a => T s a String
-
 
 ------------------------------------------------------------------------
 
