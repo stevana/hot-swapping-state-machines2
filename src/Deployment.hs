@@ -24,25 +24,21 @@ import Message
 
 ------------------------------------------------------------------------
 
-data Source a where
-  FromList :: [Msg a] -> Source a
-  StdIn :: Read a => Source a
-  -- FromFile :: FilePath -> Source Text
-  FromTCP :: Int -> Source Socket -- Socket
+data Source a
+  = Stdin
+  | FromFile FilePath
+  | FromTCP Int
+  | FromList [Msg a]
 
-data Sink b r where
-  ToList :: Sink b [Msg b]
-  StdOut :: Show b => Sink b ()
-  -- ToFile :: FilePath -> Source Text ()
-  ToTCP :: Sink b () -- (Socket, ByteString) ()
+data Sink
+  = Stdout
+  | ToFile FilePath
+  | ToTCP
 
 ------------------------------------------------------------------------
 
-data Source' a = Stdin' | FromFile' FilePath | FromTCP' Int | FromList' [Msg a]
-data Sink' = Stdout' | ToFile' FilePath | ToTCP'
-
-source' :: Source' a -> Codec (Msg a) (Msg b) -> Queue (Msg a) -> IO ()
-source' Stdin' c q = loop
+source :: Source a -> Codec (Msg a) (Msg b) -> Queue (Msg a) -> IO ()
+source Stdin c q = loop
   where
     loop = do
       s <- BS8.getLine
@@ -55,7 +51,7 @@ source' Stdin' c q = loop
                         Right msg -> do
                           writeQueue q msg
                           loop
-source' (FromFile' fp) c q =
+source (FromFile fp) c q =
   withFile fp ReadMode $ \h ->
     loop h
   where
@@ -68,82 +64,29 @@ source' (FromFile' fp) c q =
         Right msg -> do
           writeQueue q msg
           loop h
-source' (FromTCP' port) c q =
-  tcpSource' Nothing (show port) c q
+source (FromTCP port) c q =
+  tcpSource Nothing (show port) c q
 
-source' (FromList' msgs) _c q = do
+source (FromList msgs) _c q = do
   mapM_ (writeQueue q) msgs
   writeQueue q Done
 
-sink' :: Sink' -> Codec (Msg a) (Msg b) -> Queue (Msg b) -> IO ()
-sink' Stdout' c q = loop
+sink :: Sink -> Codec (Msg a) (Msg b) -> Queue (Msg b) -> IO ()
+sink Stdout c q = loop
   where
     loop = do
       msg <- readQueue q
       case msg of
         Done       -> return ()
         _otherwise -> BS8.putStrLn (encode c msg) >> loop
-sink' ToTCP' c q = tcpSink' c q
+sink ToTCP c q = tcpSink c q
 
-run' :: (Typeable a, Typeable b) => Source' a -> Codec (Msg a) (Msg b) -> P a b -> Sink' -> IO ()
-run' src codec p snk = do
+run :: (Typeable a, Typeable b) => Source a -> Codec (Msg a) (Msg b) -> P a b -> Sink -> IO ()
+run src codec p snk = do
   q <- newQueue
-  withForkIO_ (source' src codec q) $ do
+  withForkIO_ (source src codec q) $ do
     q' <- deploy p q
-    sink' snk codec q'
-
-------------------------------------------------------------------------
-
-run :: (Typeable a, Typeable b) => Source a -> P a b -> Sink b r -> IO r
-run (FromList xs) p ToList = do
-  q <- newQueue
-  q' <- deploy p q
-  mapM_ (writeQueue q) xs
-  replicateM (length xs) (readQueue q')
-run (FromList xs0) p StdOut = do
-  q <- newQueue
-  q' <- deploy p q
-  let go [] = return ()
-      go (x : xs) = do
-        case x of
-          UpgradePipeline p' -> do
-            putStrLn "<Upgraded pipeline>"
-            run (FromList xs) p' StdOut
-          _otherwise -> do
-            writeQueue q x
-            y <- readQueue q'
-            print y
-            go xs
-  go xs0
-run StdIn p StdOut = do
-  q <- newQueue
-  q' <- deploy p q
-  let go = do
-        l <- getLine
-        case readMaybe l of
-          Just (UpgradePipeline_ ua' ub' up') -> do
-            case (inferTy ua', inferTy ub') of
-              (ETy a', ETy b') ->
-                case typeCheckP a' b' up' of
-                  Just (EP Witness Witness p') -> do
-                    putStrLn "<Upgraded pipeline>"
-                    run StdIn p' StdOut
-                  Nothing -> putStrLn "<Upgrade failed>" >> go
-          Just msg -> do
-            writeQueue q msg
-            y <- readQueue q'
-            print y
-            go
-          Nothing -> putStrLn "<Parse error>" >> go
-  go
-run StdIn _p ToList = undefined
-run (FromTCP _port) p ToTCP = do
-  q <- newQueue
-  _q' <- deploy p q
-  undefined
-  -- withForkIO_ (tcpSource Nothing (show port) q) $ do
-
-    -- tcpSink q'
+    sink snk codec q'
 
 ------------------------------------------------------------------------
 
@@ -183,8 +126,6 @@ deploy (SM name s0 f0) q = do
           Done -> do
             writeQueue q' Done
             return ()
-          UpgradePipeline {} -> error "deploy, impossible, handled upsteam in `run`"
-          UpgradePipeline_ {} -> error "deploy, impossible, handled upsteam in `run`"
   _pid <- forkIO (go s0 f0)
   return q'
 

@@ -11,7 +11,7 @@ import Codec
 test :: IO ()
 test = do
   print xs
-  run' (FromTCP' 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP' -- Stdout'
+  run (FromTCP 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP -- Stdout'
   where
     xs :: [Msg String]
     xs =
