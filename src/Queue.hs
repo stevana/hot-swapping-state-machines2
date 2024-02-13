@@ -20,6 +20,9 @@ readQueue = atomically . readTBQueue
 writeQueue :: Queue a -> a -> IO ()
 writeQueue q x = atomically (writeTBQueue q x)
 
+flushQueue :: Queue a -> IO [a]
+flushQueue = atomically . flushTBQueue
+
 ------------------------------------------------------------------------
 
 withQueue :: Show a => (Queue a -> IO ()) -> IO ()

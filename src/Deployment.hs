@@ -27,13 +27,14 @@ import Utils
 data Source a
   = Stdin
   | FromFile FilePath
-  | FromTCP Int
+  | FromTCP String Int
   | FromList [Msg a]
 
-data Sink
-  = Stdout
-  | ToFile FilePath
-  | ToTCP
+data Sink b r where
+  Stdout :: Sink b ()
+  ToFile :: FilePath -> Sink b ()
+  ToTCP  :: Sink b ()
+  ToList :: Sink b [Msg b]
 
 ------------------------------------------------------------------------
 
@@ -64,14 +65,14 @@ source (FromFile fp) c q =
         Right msg -> do
           writeQueue q msg
           loop h
-source (FromTCP port) c q =
-  tcpSource Nothing (show port) c q
+source (FromTCP host port) c q =
+  tcpSource (Just host) (show port) c q
 
 source (FromList msgs) _c q = do
   mapM_ (writeQueue q) msgs
   writeQueue q Done
 
-sink :: Sink -> Codec (Msg a) (Msg b) -> Queue (Msg b) -> IO ()
+sink :: Sink b r -> Codec (Msg a) (Msg b) -> Queue (Msg b) -> IO r
 sink Stdout c q = loop
   where
     loop = do
@@ -80,8 +81,9 @@ sink Stdout c q = loop
         Done       -> return ()
         _otherwise -> BS8.putStrLn (encode c msg) >> loop
 sink ToTCP c q = tcpSink c q
+sink ToList _c q = flushQueue q
 
-run :: (Typeable a, Typeable b) => Source a -> Codec (Msg a) (Msg b) -> P a b -> Sink -> IO ()
+run :: (Typeable a, Typeable b) => Source a -> Codec (Msg a) (Msg b) -> P a b -> Sink b r -> IO r
 run src codec p snk = do
   q <- newQueue
   withForkIO_ (source src codec q) $ do

@@ -2,10 +2,8 @@
 
 module TCP where
 
-import Control.Concurrent
 import Control.Exception
 import Control.Monad
-import Data.ByteString
 import Network.Socket
 import Network.Socket.ByteString
 

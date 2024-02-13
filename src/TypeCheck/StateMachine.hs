@@ -74,7 +74,7 @@ typeCheck (uf :.&& ug) s a (TPair b c) = do
 typeCheck (uf :.++ ug) s (TEither a b) (TEither c d) = do
   f <- typeCheck uf s a c
   g <- typeCheck ug s b d
-  return (f :+++ g)
+  return (Case f g)
 typeCheck (ReadU _ua) _s TString a =
   case inferRead a of
     Just Witness -> return Read
@@ -133,7 +133,7 @@ inferI (SecondU _ug) _s _ = throw SecondTE
 inferI (uf :.++ ug) s (TEither c d) = do
   EI a f <- inferI uf s c
   EI b g <- inferI ug s d
-  return (EI (TEither a b) (f :+++ g))
+  return (EI (TEither a b) (Case f g))
 inferI (uf :.&& ug) s (TPair b c) = do
   EI a  f <- inferI uf s b
   EI a' g <- inferI ug s c

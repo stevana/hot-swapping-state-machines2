@@ -2,7 +2,7 @@
 
 module Example.Counter where
 
-import Syntax.StateMachine.Typed
+import Syntax.StateMachine.Typed hiding (Consume, Fst, Snd, Copy, First, Second, (:|||))
 import Syntax.StateMachine.Untyped
 import Syntax.Types
 
@@ -22,7 +22,7 @@ pattern IncrCountV1 = Right ()
 counterV1 :: T Int String String
 counterV1 = -- Loop (Second (Delay 0) >>>
   -- Distr >>> ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& Incr))) >>> Distr'
-  Read >>> (Get :+++ (Get >>> Incr >>> Put)) >>> Show
+  Read >>> Get `Case` (Get >>> Incr >>> Put) >>> Show
 
 inputV1 :: Ty_
 inputV1 = UTEither UTUnit UTUnit
@@ -47,7 +47,7 @@ counterV2 = -- Loop $ Second (Delay 0) >>>
   -- distr2 >>>
   -- ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& (Incr >>> Incr)))) :+++ (Consume :&&& (Int 0))
   -- >>> distr2'
-  (Read :: T Int String InputV2) >>> (Get :+++ (Get >>> Incr >>> Put) :+++ (Int 0 >>> Put)) >>> Show
+  (Read :: T Int String InputV2) >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
 
 pattern ReadCountV2 :: InputV2
 pattern ReadCountV2  = Left ()

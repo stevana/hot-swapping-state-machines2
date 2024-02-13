@@ -4,30 +4,44 @@ module Syntax.StateMachine.Typed where
 
 ------------------------------------------------------------------------
 
-infixr 2 :+++
+infixr 2 `Case`
+infixr 2 :|||
+infixr 3 :&&&
 
 data T s a b where
+  -- Identity and composition.
   Id      :: T s a a
   Compose :: T s b c -> T s a b -> T s a c
+
+  -- Introducing and incrementing integers.
+  Int     :: Int -> T s () Int
+  Incr    :: T s Int Int
+
+  -- Working with product types.
+  Consume :: T s a ()
   Fst     :: T s (a, b) a
   Snd     :: T s (a, b) b
   Copy    :: T s a (a, a)
-  Consume :: T s a ()
-  Int     :: Int -> T s () Int
-  Incr    :: T s Int Int
-  Get     :: T s () s
-  Put     :: T s s ()
-  -- Loop    :: T s (a, s) (b, s) -> T s a b
   First   :: T s a b -> T s (a, c) (b, c)
   Second  :: T s b c -> T s (a, b) (a, c)
   (:&&&)  :: T s a b -> T s a c -> T s a (b, c)
-  -- Delay   :: a -> T s a a
+
+  -- Working with sum types.
   (:|||)  :: T s a c -> T s b c -> T s (Either a b) c
-  (:+++)  :: T s a c -> T s b d -> T s (Either a b) (Either c d)
-  Distr   :: T s (Either a b, c) (Either (a, c) (b, c))
-  Distr'  :: T s (Either (a, c) (b, c)) (Either a b, c)
+  Case    :: T s a c -> T s b d -> T s (Either a b) (Either c d)
+
+  -- Read and update the state.
+  Get     :: T s () s
+  Put     :: T s s ()
+
+  -- Converting values from and to strings.
   Read    :: Read a => T s String a
   Show    :: Show a => T s a String
+
+  -- Loop    :: T s (a, s) (b, s) -> T s a b
+  -- Delay   :: a -> T s a a
+  -- Distr   :: T s (Either a b, c) (Either (a, c) (b, c))
+  -- Distr'  :: T s (Either (a, c) (b, c)) (Either a b, c)
 
 ------------------------------------------------------------------------
 

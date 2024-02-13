@@ -29,7 +29,7 @@ eval (First f)     = \(x, y) -> eval f x >>= \x' -> return (x', y)
 eval (Second g)    = \(x, y) -> eval g y >>= \y' -> return (x, y')
 eval (f :&&& g)    = \x -> (,) <$> eval f x <*> eval g x
 eval (_f :||| _g)  = undefined
-eval (f :+++ g)    = either (fmap Left . eval f) (fmap Right . eval g)
+eval (Case f g)    = either (fmap Left . eval f) (fmap Right . eval g)
 eval Read          = return . read
 eval Show          = return . show
 eval _ = undefined
@@ -54,13 +54,13 @@ evalS (Second g)    = zipS . second (evalS g) . unzipS
 evalS (f :&&& g)    = zipS . (evalS f A.*** evalS g) . unzipS . evalS Copy -- XXX: awkward
 -- evalS (Delay x)     = undefined -- Cons x
 evalS (_f :||| _g)    = undefined -- mapS $ either (evalS f) (evalS g)
-evalS (f :+++ g)    = \xs -> combineS xs . bimap (evalS f) (evalS g) . splitS $ xs -- mapS . bimap (evalS f) (evalS g)
-evalS Distr         = mapS $ \(e, c) -> case e of
-                                  Left  x -> Left  (x, c)
-                                  Right y -> Right (y, c)
-evalS Distr'        = mapS $ \e -> case e of
-                             Left  (x, c) -> (Left x, c)
-                             Right (y, c) -> (Right y, c)
+evalS (Case f g)    = \xs -> combineS xs . bimap (evalS f) (evalS g) . splitS $ xs -- mapS . bimap (evalS f) (evalS g)
+-- evalS Distr         = mapS $ \(e, c) -> case e of
+--                                   Left  x -> Left  (x, c)
+--                                   Right y -> Right (y, c)
+-- evalS Distr'        = mapS $ \e -> case e of
+--                              Left  (x, c) -> (Left x, c)
+--                              Right (y, c) -> (Right y, c)
 
 runS :: T s a b -> [a] -> [b]
 runS f xs = take (length xs) (toListS (evalS f (fromListS xs)))
