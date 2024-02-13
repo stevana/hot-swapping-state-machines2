@@ -25,7 +25,7 @@ data Msg a where
   Done :: Msg a
 
 instance Show a => Show (Msg a) where
-  show (Item _msock x) = "Item " ++ show x
+  show (Item _msock x) = "Item \"" ++ show x ++ "\""
   show (Upgrade _msock name _sm _g) = "Upgrade " ++ name
   show (Upgrade_ _msock name s s' a b f g) = unwords ["Upgrade_", show name, show s, show s', show a, show b, "(" ++ show f ++ ")", show g]
   show (UpgradeSucceeded _msock name) = "UpgradeSucceeded " ++ name

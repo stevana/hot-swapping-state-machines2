@@ -1,8 +1,6 @@
 module Main where
 
-import qualified MyLib (someFunc)
+import LibMain
 
 main :: IO ()
-main = do
-  putStrLn "Hello, Haskell!"
-  MyLib.someFunc
+main = libMain

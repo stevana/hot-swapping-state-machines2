@@ -168,13 +168,32 @@ run :: (Typeable a, Typeable b) => Source a -> Codec (Msg a) (Msg b) -> P a b ->
 run (FromTCP "127.0.0.1" 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP
 ```
 
+```bash
+# Get the current state of the counter.
+$ echo 'Item "Left ()"' | nc 127.0.0.1 3000
+Item "Left 0"
+
+# Increment the counter.
+$ echo 'Item "Right ()"' | nc 127.0.0.1 3000
+Item "Right ()"
+
+# Read the counter again.
+$ echo 'Item "Left ()"' | nc 127.0.0.1 3000
+Item "Left 1"
+```
+
+```haskell
+nc "127.0.0.1" 3000 (Item Nothing (Left ()))
+```
+
+
 ## Future work
 
 - [ ] Upgrade pipelines, rather than state machines running in the pipelines;
 - [ ] Better language for describing state machines?
 - [ ] Content-addressed hashes?
 - [ ] Combining multiple sources?
-- [ ] Multiple sinks? `Tee :: P a b -> Sink b () -> P a b`?
+- [ ] Multiple sinks? `Tee :: P a b -> Sink a () -> P a b`?
 - [ ] Blocking file I/O, let it block and rely on pipelining parallelism and sharding
 
 

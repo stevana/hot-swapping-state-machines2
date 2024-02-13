@@ -20,18 +20,9 @@ throw = Left
 ------------------------------------------------------------------------
 
 typeCheck :: U -> Ty s -> Ty a -> Ty b -> Either TypeError (T s a b)
-typeCheck IdU _s TBool TBool = return Id
-typeCheck IdU _s TInt  TInt  = return Id
-typeCheck IdU _s TString TString  = return Id
-typeCheck IdU _s (TEither a b) (TEither a' b') =
-  case (testEquality a a', testEquality b b') of
-    (Just Refl, Just Refl) -> return Id
-    _ -> error "typeCheck IdU"
-typeCheck IdU _s (TPair a b) (TPair a' b') =
-  case (testEquality a a', testEquality b b') of
-    (Just Refl, Just Refl) -> return Id
-    _ -> error "typeCheck: IdU Pair"
-typeCheck IdU _ _ _ = throw IdTE
+typeCheck IdU _s a b = case testEquality a b of
+  Just Refl -> return Id
+  Nothing   -> throw IdTE
 typeCheck (ComposeU ug uf) s a c = do
   EI b  g <- inferI ug s c
   EO b' f <- inferO uf s a
@@ -102,8 +93,7 @@ data EI s b where
   EI :: Ty a -> T s a b -> EI s b
 
 inferO :: U -> Ty s -> Ty a -> Either TypeError (EO s a)
-inferO IdU _s TInt  = return (EO TInt Id)
-inferO IdU _s TBool = return (EO TBool Id)
+inferO IdU _s a  = return (EO a Id)
 inferO (ComposeU ug uf) s a = do
   EO b f <- inferO uf s a
   EO c g <- inferO ug s b

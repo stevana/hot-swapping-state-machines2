@@ -10,8 +10,8 @@ import Codec
 
 ------------------------------------------------------------------------
 
-test :: IO ()
-test = do
+libMain :: IO ()
+libMain = do
   print xs
   run (FromTCP "127.0.0.1" 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP
   where
