@@ -107,40 +107,30 @@ deploy (SM name s0 f0) q = do
             let (o, s') = runT f i s
             writeQueue q' (Item msock o)
             go s' f
-          Upgrade msock name' f' mg
+          Upgrade msock name' sty sty' a' b' f' mg
             | name /= name' -> do
-                writeQueue q' (Upgrade msock name' f' mg)
+                writeQueue q' (Upgrade msock name' sty sty' a' b' f' mg)
                 go s f
-            | otherwise -> case (cast f', cast s) of
-                             (Just (f'' :: T s a b), Just s') -> do
-                               writeQueue q' (UpgradeSucceeded Nothing name)
-                               case mg of
-                                 Nothing -> go s f''
-                                 Just g  -> go (g s') undefined
-                             _ -> do
-                               writeQueue q' (UpgradeFailed Nothing name)
-                               go s f
-          Upgrade_ msock name' sty sty' a' b' f' mg -> do
-            case tryUpgrade s f (UpgradeD_ sty sty' a' b' f' mg) of
-              Just (SameState f') -> do
-                writeQueue q' (UpgradeSucceeded msock name)
-                go s f'
-              Just (DifferentState g f') -> do
-                writeQueue q' (UpgradeSucceeded msock name)
-                let (_, s') = runT g s ()
-                go s' f'
-              Nothing -> do
-                writeQueue q' (UpgradeFailed msock name)
-                go s f
+            | otherwise ->
+                case tryUpgrade s f (UpgradeD_ sty sty' a' b' f' mg) of
+                  Just (SameState f') -> do
+                    writeQueue q' (UpgradeSucceeded msock name)
+                    go s f'
+                  Just (DifferentState g f') -> do
+                    writeQueue q' (UpgradeSucceeded msock name)
+                    let (_, s') = runT g s ()
+                    go s' f'
+                  Nothing -> do
+                    writeQueue q' (UpgradeFailed msock name)
+                    go s f
           UpgradeSucceeded msock name' -> do
             writeQueue q' (UpgradeSucceeded msock name')
             go s f
           UpgradeFailed msock name' -> do
             writeQueue q' (UpgradeFailed msock name')
             go s f
-          Done -> do
-            writeQueue q' Done
-            return ()
+          Done -> writeQueue q' Done
+  -- The this process will terminate when `Done` is processed.
   _pid <- forkIO (go s0 f0)
   return q'
 

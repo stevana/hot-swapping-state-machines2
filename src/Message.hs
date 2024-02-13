@@ -17,8 +17,7 @@ import Syntax.Types
 
 data Msg a where
   Item    :: Maybe Socket -> a -> Msg a
-  Upgrade :: (Typeable s, Typeable s', Typeable i, Typeable o) => Maybe Socket -> Name -> T s' i o -> Maybe (s -> s') -> Msg a
-  Upgrade_ :: Maybe Socket -> Name -> Ty_ -> Ty_ -> Ty_ -> Ty_ -> U -> U -> Msg a
+  Upgrade :: Maybe Socket -> Name -> Ty_ -> Ty_ -> Ty_ -> Ty_ -> U -> U -> Msg a
   UpgradeSucceeded :: Maybe Socket -> Name -> Msg a
   UpgradeFailed :: Maybe Socket -> Name -> Msg a
 
@@ -26,8 +25,7 @@ data Msg a where
 
 instance Show a => Show (Msg a) where
   show (Item _msock x) = "Item \"" ++ show x ++ "\""
-  show (Upgrade _msock name _sm _g) = "Upgrade " ++ name
-  show (Upgrade_ _msock name s s' a b f g) = unwords ["Upgrade_", show name, show s, show s', show a, show b, "(" ++ show f ++ ")", show g]
+  show (Upgrade _msock name s s' a b f g) = unwords ["Upgrade", show name, show s, show s', show a, show b, "(" ++ show f ++ ")", show g]
   show (UpgradeSucceeded _msock name) = "UpgradeSucceeded " ++ name
   show (UpgradeFailed _msock name) = "UpgradeFailed " ++ name
   show Done = "Done"
@@ -40,22 +38,20 @@ instance Read a => Read (Msg a) where
         Item Nothing <$> readPrec
 
       upgradeP = do
-        Ident "Upgrade_" <- lexP
-        Upgrade_ Nothing <$> readPrec <*> readPrec <*> readPrec
+        Ident "Upgrade" <- lexP
+        Upgrade Nothing <$> readPrec <*> readPrec <*> readPrec
           <*> readPrec <*> readPrec <*> parens readPrec <*> readPrec
 
 messageSocket :: Msg a -> Maybe Socket
 messageSocket (Item msock _) = msock
-messageSocket (Upgrade msock _ _ _) = msock
-messageSocket (Upgrade_ msock _ _ _ _ _ _ _) = msock
+messageSocket (Upgrade msock _ _ _ _ _ _ _) = msock
 messageSocket (UpgradeSucceeded msock _) = msock
 messageSocket (UpgradeFailed msock _) = msock
 messageSocket _ = error "messageSocket"
 
 setMessageSocket :: Msg a -> Socket -> Msg a
 setMessageSocket (Item _msock x) sock = Item (Just sock) x
-setMessageSocket (Upgrade _msock name f g) sock = Upgrade (Just sock) name f g
-setMessageSocket (Upgrade_ _msock name s s' a b f g) sock = Upgrade_ (Just sock) name s s' a b f g
+setMessageSocket (Upgrade _msock name s s' a b f g) sock = Upgrade (Just sock) name s s' a b f g
 setMessageSocket _ _ = error "setMessageSocket"
 
 ------------------------------------------------------------------------
