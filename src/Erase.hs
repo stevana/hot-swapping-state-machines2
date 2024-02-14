@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 module Erase where
 
 import Syntax.StateMachine.Typed

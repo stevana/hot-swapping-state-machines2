@@ -4,7 +4,7 @@
 module Interpreter where
 
 import Control.Monad
-import Control.Arrow (first, loop, second)
+import Control.Arrow (first, second)
 import qualified Control.Arrow as A
 import Data.Bifunctor (bimap)
 import Control.Monad.State
@@ -32,7 +32,6 @@ eval (f :&&& g)    = \x -> (,) <$> eval f x <*> eval g x
 eval (Case f g)    = either (fmap Left . eval f) (fmap Right . eval g)
 eval Read          = return . read
 eval Show          = return . show
-eval _ = undefined
 
 runT :: T s a b -> a -> s -> (b, s)
 runT f x s = runState (eval f x) s
@@ -61,6 +60,10 @@ evalS (Case f g)    = \xs -> combineS xs . bimap (evalS f) (evalS g) . splitS $ 
 -- evalS Distr'        = mapS $ \e -> case e of
 --                              Left  (x, c) -> (Left x, c)
 --                              Right (y, c) -> (Right y, c)
+evalS Get = undefined
+evalS Put = undefined
+evalS Read = undefined
+evalS Show = undefined
 
 runS :: T s a b -> [a] -> [b]
 runS f xs = take (length xs) (toListS (evalS f (fromListS xs)))

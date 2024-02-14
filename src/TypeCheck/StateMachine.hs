@@ -11,7 +11,7 @@ import Syntax.Types
 ------------------------------------------------------------------------
 
 data TypeError = IdTE | ComposeTE | CopyTE | FstTE | SndTE | SecondTE | LoopTE | Distr'TE
-  | GetTE | PutTE
+  | GetTE | PutTE | InputMismatch Ty_ | OutputMismatch Ty_ | OldStateMismatch Ty_ | NewStateMismatch Ty_
   deriving Show
 
 throw :: TypeError -> Either TypeError a
@@ -69,9 +69,11 @@ typeCheck (CaseU uf ug) s (TEither a b) (TEither c d) = do
 typeCheck (ReadU _ua) _s TString a =
   case inferRead a of
     Just Witness -> return Read
+    Nothing -> error "typeCheck: Read"
 typeCheck (ShowU _ua) _s a TString =
   case inferShow a of
     Just Witness -> return Show
+    Nothing -> error "typeCheck: Show"
 typeCheck u s a b = error (show (u, s, a, b))
 
 ------------------------------------------------------------------------
@@ -107,6 +109,7 @@ inferO (ReadU ua) _s TString = do
   case inferTy ua of
     ETy a -> case inferRead a of
       Just Witness -> return (EO a Read)
+      Nothing -> error "inferO: ReadU"
 inferO u s t = error ("inferO: " ++ show (u, s, t))
 
 inferI :: U -> Ty s -> Ty b -> Either TypeError (EI s b)
@@ -141,6 +144,7 @@ inferI (ShowU ua) _s TString = do
   case inferTy ua of
     ETy a -> case inferShow a of
       Just Witness -> return (EI a Show)
+      Nothing -> error "inferI: ShowU"
 inferI GetU s s' = case testEquality s s' of
    Just Refl -> return (EI TUnit Get)
    Nothing -> error $ "inferI: GetU: s=" ++ show s ++ ", s'= " ++ show s'

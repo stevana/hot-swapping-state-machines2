@@ -61,7 +61,7 @@ inferOP a (SMU name sty_ us uf) =
     ETy (sty :: Ty s) -> do
       case inferO uf sty a of
         Right (EO b f) -> case fromDynamic us of
-          Just (s :: s) -> return (EPO b (SM name s undefined))
+          Just (s :: s) -> return (EPO b (SM name s f))
           Nothing -> error "inferOP: SMU"
         Left err -> error (show err)
 
@@ -77,6 +77,6 @@ inferIP b (SMU name sty_ us uf) =
     ETy (sty :: Ty s) -> do
       case inferI uf sty b of
         Right (EI a f) -> case fromDynamic us of
-          Just (s :: s) -> return (EPI a (SM name s undefined))
+          Just (s :: s) -> return (EPI a (SM name s f))
           Nothing -> error "inferIP: SMU"
         Left err -> error (show err)

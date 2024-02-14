@@ -125,15 +125,14 @@ deploy (SM name s0 f0) q = do
                 writeQueue q' (Upgrade msock name' ud)
                 go s f
             | otherwise ->
-                case tryUpgrade s f ud of
-                  Just (SameState f'') -> do
+                case typeCheckUpgrade s f ud of
+                  Right (UpgradeData (f' :: T s a b) (g :: T () s s)) -> do
                     writeQueue q' (UpgradeSucceeded msock name)
-                    go s f''
-                  Just (DifferentState g f'') -> do
-                    writeQueue q' (UpgradeSucceeded msock name)
-                    let (_, s') = runT g s ()
-                    go s' f''
-                  Nothing -> do
+                    let (s', ()) = runT g s ()
+                    go s' f'
+                  Left err -> do
+                    print ud
+                    print err
                     writeQueue q' (UpgradeFailed msock name)
                     go s f
           UpgradeSucceeded msock name' -> do

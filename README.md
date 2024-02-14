@@ -145,12 +145,12 @@ data Msg a where
 
 ```haskell
 data UpgradeData_ = UpgradeData_
-  { oldState       :: Ty_
-  , newState       :: Ty_
-  , newInput       :: Ty_
-  , newOutput      :: Ty_
-  , newSM          :: U
-  , stateMigration :: U
+  { oldState        :: Ty_
+  , newState        :: Ty_
+  , newInput        :: Ty_
+  , newOutput       :: Ty_
+  , newStateMachine :: U
+  , stateMigration  :: U
   }
 ```
 
@@ -260,6 +260,7 @@ Item "Left 0"               -- The value is back to 0.
 ## Future work
 
 - [ ] Upgrade pipelines, rather than state machines running in the pipelines;
+- [ ] Upgrade the platform/language/VM without downtime?
 - [ ] Better language for describing state machines?
 - [ ] Content-addressed hashes?
 - [ ] Combining multiple sources?

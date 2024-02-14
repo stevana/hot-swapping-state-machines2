@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Syntax.StateMachine.Typed where
 
@@ -42,6 +43,8 @@ data T s a b where
   -- Delay   :: a -> T s a a
   -- Distr   :: T s (Either a b, c) (Either (a, c) (b, c))
   -- Distr'  :: T s (Either (a, c) (b, c)) (Either a b, c)
+
+deriving instance Show (T s a b)
 
 ------------------------------------------------------------------------
 

@@ -31,3 +31,4 @@ instance Read UP where
                 (s :: s) <- readPrec
                 f <- parens readPrec
                 return (SMU name sty_ (toDyn s) f)
+              Nothing -> error "read: SMU"
