@@ -28,3 +28,11 @@ readShowCodec = Codec
   { decode = bimap DecodeError id . readEither . BS8.unpack
   , encode = BS8.pack . show
   }
+
+idCodec :: Codec (Msg ByteString) (Msg ByteString)
+idCodec = Codec
+  { decode = Right . Item_
+  , encode = \case
+      Item _ bs -> bs
+      _otherwise -> error "idCodec: non item"
+  }

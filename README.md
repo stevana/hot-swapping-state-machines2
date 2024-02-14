@@ -2,15 +2,6 @@
 
 *Work in progress, please don't share, but do feel free to get involved!*
 
-In this post I'd like to show how one can represent state machines as
-`ArrowLoop` instances and what consequences that has with respect to performing
-hot code upgrades of said state machines without any downtime.
-
-This post builds upon ideas form two previous posts, but can be read on its own.
-
-* https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html
-* https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html
-
 ## Motivation
 
 Most deployed programs need to be upgraded at some point. The reasons vary from
@@ -137,6 +128,7 @@ type Name = String
 ```
 
 ### Deployment
+
 ```haskell
 deploy :: forall a b. (Typeable a, Typeable b)
        => P a b -> Queue (Msg a) -> IO (Queue (Msg b))
@@ -145,16 +137,71 @@ deploy :: forall a b. (Typeable a, Typeable b)
 ```haskell
 data Msg a where
   Item    :: Maybe Socket -> a -> Msg a
-  Upgrade :: Maybe Socket -> Name -> Ty_ -> Ty_ -> Ty_ -> Ty_ -> U -> U -> Msg a
+  Upgrade :: Maybe Socket -> Name -> UpgradeData_-> Msg a
   ...
 ```
 
+### Upgrades
 
-### Local (typed) upgrades
+```haskell
+data UpgradeData_ = UpgradeData_
+  { oldState       :: Ty_
+  , newState       :: Ty_
+  , newInput       :: Ty_
+  , newOutput      :: Ty_
+  , newSM          :: U
+  , stateMigration :: U
+  }
+```
+
 
 ### Untyped state machines
 
+```haskell
+data U
+  = IdU
+  | ComposeU U U
+  | IntU Int
+  | CaseU U U
+  | IncrU
+  | GetU
+  | PutU
+  | ReadU Ty_
+  | ShowU Ty_
+```
+
+```haskell
+data Ty_
+  = UTUnit
+  | UTInt
+  | UTBool
+  | UTString
+  | UTPair Ty_ Ty_
+  | UTEither Ty_ Ty_
+```
+
 ### Type checking and inference
+
+```haskell
+data Ty a where
+  TUnit   :: Ty ()
+  TInt    :: Ty Int
+  TBool   :: Ty Bool
+  TString :: Ty String
+  TPair   :: Ty a -> Ty b -> Ty (a, b)
+  TEither :: Ty a -> Ty b -> Ty (Either a b)
+  TDon'tCare :: Ty a
+```
+
+
+```haskell
+data ETy where
+  ETy :: Typeable a => Ty a -> ETy
+
+inferTy :: Ty_ -> ETy
+
+typeCheck :: U -> Ty s -> Ty a -> Ty b -> Either TypeError (T s a b)
+```
 
 ### Sources and sinks
 
@@ -183,7 +230,30 @@ Item "Left 1"
 ```
 
 ```haskell
-nc "127.0.0.1" 3000 (Item Nothing (Left ()))
+nc "127.0.0.1" 3000 (Item_ (show ReadCountV1))
+nc "127.0.0.1" 3000 (Item_ (show IncrCountV1))
+nc "127.0.0.1" 3000 (Item_ (show IncrCountV1))
+nc "127.0.0.1" 3000 (Item_ (show ReadCountV1))
+
+let msg :: Msg ()
+    msg = Upgrade_ "counter"
+            (UpgradeData_ UTInt UTInt UTString UTString counterV2U IdU)
+nc "127.0.0.1" 3000 msg
+
+nc "127.0.0.1" 3000 (Item_ (show ReadCountV2))
+nc "127.0.0.1" 3000 (Item_ (show ResetCountV2))
+nc "127.0.0.1" 3000 (Item_ (show ReadCountV2))
+```
+
+```
+Item "Left 0"               -- The initial value of the counter is 0.
+Item "Right ()"             -- Two increments.
+Item "Right ()"
+Item "Left 2"               -- The value is now 2
+UpgradeSucceeded "counter"
+Item "Left 2"               -- The counter's state is preserved by the upgrade
+Item "Right (Right ())"     -- Reset the counter.
+Item "Left 0"               -- The value is back to 0.
 ```
 
 
@@ -195,6 +265,7 @@ nc "127.0.0.1" 3000 (Item Nothing (Left ()))
 - [ ] Combining multiple sources?
 - [ ] Multiple sinks? `Tee :: P a b -> Sink a () -> P a b`?
 - [ ] Blocking file I/O, let it block and rely on pipelining parallelism and sharding
+- [ ] How to we build something like a REST API on top of the TCP stuff?
 
 
 ## Contributing
@@ -207,6 +278,12 @@ cabal repl
 ```
 
 ## See also
+
+* [Parallel stream processing with zero-copy fan-out and
+  sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html);
+
+* [Hot-swapping state
+  machines](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html);
 
 * [Application architecture as
   code](https://www.youtube.com/watch?v=vasvpFRPx9c)

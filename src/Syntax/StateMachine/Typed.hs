@@ -5,7 +5,7 @@ module Syntax.StateMachine.Typed where
 ------------------------------------------------------------------------
 
 infixr 2 `Case`
-infixr 2 :|||
+-- infixr 2 :|||
 infixr 3 :&&&
 
 data T s a b where
@@ -27,7 +27,7 @@ data T s a b where
   (:&&&)  :: T s a b -> T s a c -> T s a (b, c)
 
   -- Working with sum types.
-  (:|||)  :: T s a c -> T s b c -> T s (Either a b) c
+  -- (:|||)  :: T s a c -> T s b c -> T s (Either a b) c
   Case    :: T s a c -> T s b d -> T s (Either a b) (Either c d)
 
   -- Read and update the state.

@@ -62,7 +62,7 @@ typeCheck (uf :.&& ug) s a (TPair b c) = do
   f <- typeCheck uf s a b
   g <- typeCheck ug s a c
   return (f :&&& g)
-typeCheck (uf :.++ ug) s (TEither a b) (TEither c d) = do
+typeCheck (CaseU uf ug) s (TEither a b) (TEither c d) = do
   f <- typeCheck uf s a c
   g <- typeCheck ug s b d
   return (Case f g)
@@ -120,7 +120,7 @@ inferI (SecondU ug) s (TPair a c) = do
   EI b g <- inferI ug s c
   return (EI (TPair a b) (Second g))
 inferI (SecondU _ug) _s _ = throw SecondTE
-inferI (uf :.++ ug) s (TEither c d) = do
+inferI (CaseU uf ug) s (TEither c d) = do
   EI a f <- inferI uf s c
   EI b g <- inferI ug s d
   return (EI (TEither a b) (Case f g))

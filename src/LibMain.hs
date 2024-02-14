@@ -1,37 +1,47 @@
 module LibMain where
 
+import Control.Exception
+import System.Directory
+
 import Deployment
 import Example.Counter
 import Syntax.Pipeline.Typed
+import Codec
+import Upgrade
+import TCP
+import Message
 import Syntax.StateMachine.Untyped
 import Syntax.Types
-import Message
-import Codec
 
 ------------------------------------------------------------------------
 
 libMain :: IO ()
 libMain = do
-  print xs
+  putStrLn "Starting TCP server on 127.0.0.1:3000"
   run (FromTCP "127.0.0.1" 3000) readShowCodec (SM "counter" 0 counterV1) ToTCP
-  where
-    xs :: [Msg String]
-    xs =
-      [ Item Nothing (show ReadCountV1)
-      , Item Nothing (show IncrCountV1)
-      , Item Nothing (show IncrCountV1)
-      , Item Nothing (show ReadCountV1)
-      , Upgrade Nothing "counter" UTInt UTInt UTString UTString counterV2U IdU
-      , Item Nothing (show ReadCountV2)
-      , Item Nothing (show ResetCountV2)
-      , Item Nothing (show ReadCountV2)
-      ]
--- >>> test
--- Item "Left 0"
--- Item "Right ()"
--- Item "Right ()"
--- Item "Left 2"
--- UpgradeSucceeded counter
--- Item "Left (Left 2)"
--- Item "Right ()"
--- Item "Left (Left 0)"
+
+-- XXX: Fix "Exception: Network.Socket.connect: <socket: 13>: does not exist
+-- (Connection refused)" when test is rerun.
+test :: IO ()
+test = do
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV1))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV1))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV1))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV1))
+
+  let msg :: Msg ()
+      msg = Upgrade_ "counter"
+              (UpgradeData_ UTInt UTInt UTString UTString counterV2U IdU)
+  nc "127.0.0.1" 3000 msg
+
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV2))
+  nc "127.0.0.1" 3000 (Item_ (show ResetCountV2))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV2))
+
+-- XXX: fix "withFile: resource busy (file is locked)" error.
+testFile :: IO ()
+testFile = do
+  let fp = "/tmp/test-file-source-and-sink.txt"
+  bracket_ (writeFile fp "apa bepa\ncepa depa epa\nfepa") (removeFile fp) $ do
+    run (FromFile fp) idCodec IdP (ToFile fp)
+    putStrLn =<< readFile fp

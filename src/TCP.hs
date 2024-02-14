@@ -4,10 +4,9 @@ module TCP where
 
 import Control.Exception
 import Control.Monad
+import qualified Data.ByteString.Char8 as BS8
 import Network.Socket
 import Network.Socket.ByteString
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as BS8
 
 import Codec
 import Message
@@ -42,7 +41,9 @@ tcpSource mhost port c q = do
         try (recv conn 1024) >>= \case
           Left err -> putStrLn (displayException (err :: IOError))
           Right bs -> case decode c bs of
-            Left err' -> putStrLn (displayDecodeError err')
+            Left err' -> do
+              print bs
+              putStrLn (displayDecodeError err')
             Right msg -> writeQueue q (setMessageSocket msg conn)
 
 tcpSink :: Codec (Msg a) (Msg b) -> Queue (Msg b) -> IO ()

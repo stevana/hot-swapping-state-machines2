@@ -1,57 +1,52 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Message where
 
-import Data.Typeable
-import Data.ByteString (ByteString)
+import GHC.Read
 import Text.Read
 import Network.Socket (Socket)
 
 import Syntax.Pipeline.Typed
-import Syntax.Pipeline.Untyped
-import Syntax.StateMachine.Typed
-import Syntax.StateMachine.Untyped
-import Syntax.Types
+import Upgrade
 
 ------------------------------------------------------------------------
 
+newtype MaybeSocket = MaybeSocket (Maybe Socket)
+  deriving Show
+
+instance Read MaybeSocket where
+  readPrec = parens $ do
+    Ident "MaybeSocket" <- lexP
+    Ident "Nothing" <- lexP
+    return (MaybeSocket Nothing)
+
 data Msg a where
-  Item    :: Maybe Socket -> a -> Msg a
-  Upgrade :: Maybe Socket -> Name -> Ty_ -> Ty_ -> Ty_ -> Ty_ -> U -> U -> Msg a
-  UpgradeSucceeded :: Maybe Socket -> Name -> Msg a
-  UpgradeFailed :: Maybe Socket -> Name -> Msg a
-
+  Item    :: MaybeSocket -> a -> Msg a
+  Upgrade :: MaybeSocket -> Name -> UpgradeData_ -> Msg a
+  UpgradeSucceeded :: MaybeSocket -> Name -> Msg a
+  UpgradeFailed :: MaybeSocket -> Name -> Msg a
   Done :: Msg a
+deriving instance Show a => Show (Msg a)
+deriving instance Read a => Read (Msg a)
 
-instance Show a => Show (Msg a) where
-  show (Item _msock x) = "Item \"" ++ show x ++ "\""
-  show (Upgrade _msock name s s' a b f g) = unwords ["Upgrade", show name, show s, show s', show a, show b, "(" ++ show f ++ ")", show g]
-  show (UpgradeSucceeded _msock name) = "UpgradeSucceeded " ++ name
-  show (UpgradeFailed _msock name) = "UpgradeFailed " ++ name
-  show Done = "Done"
+pattern Item_ :: a -> Msg a
+pattern Item_ x = Item (MaybeSocket Nothing) x
 
-instance Read a => Read (Msg a) where
-  readPrec = choice [ itemP, upgradeP ]
-    where
-      itemP = do
-        Ident "Item" <- lexP
-        Item Nothing <$> readPrec
-
-      upgradeP = do
-        Ident "Upgrade" <- lexP
-        Upgrade Nothing <$> readPrec <*> readPrec <*> readPrec
-          <*> readPrec <*> readPrec <*> parens readPrec <*> readPrec
+pattern Upgrade_ :: Name -> UpgradeData_ -> Msg a
+pattern Upgrade_ n ud = Upgrade (MaybeSocket Nothing) n ud
 
 messageSocket :: Msg a -> Maybe Socket
-messageSocket (Item msock _) = msock
-messageSocket (Upgrade msock _ _ _ _ _ _ _) = msock
-messageSocket (UpgradeSucceeded msock _) = msock
-messageSocket (UpgradeFailed msock _) = msock
+messageSocket (Item (MaybeSocket msock) _) = msock
+messageSocket (Upgrade (MaybeSocket msock) _ _) = msock
+messageSocket (UpgradeSucceeded (MaybeSocket msock) _) = msock
+messageSocket (UpgradeFailed (MaybeSocket msock) _) = msock
 messageSocket _ = error "messageSocket"
 
 setMessageSocket :: Msg a -> Socket -> Msg a
-setMessageSocket (Item _msock x) sock = Item (Just sock) x
-setMessageSocket (Upgrade _msock name s s' a b f g) sock = Upgrade (Just sock) name s s' a b f g
+setMessageSocket (Item _msock x) sock = Item (MaybeSocket (Just sock)) x
+setMessageSocket (Upgrade _msock name ud) sock = Upgrade (MaybeSocket (Just sock)) name ud
 setMessageSocket _ _ = error "setMessageSocket"
 
 ------------------------------------------------------------------------

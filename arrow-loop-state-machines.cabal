@@ -25,6 +25,7 @@ library
     Classes
     Codec
     Deployment
+    Erase
     Example.Counter
     Interpreter
     LibMain
@@ -39,11 +40,13 @@ library
     TCP
     TypeCheck.Pipeline
     TypeCheck.StateMachine
+    Upgrade
     Utils
 
   build-depends:
     , base        >=4.17.0.0
     , bytestring
+    , directory
     , ghc-prim
     , mtl
     , network

@@ -2,7 +2,7 @@
 
 module Example.Counter where
 
-import Syntax.StateMachine.Typed hiding (Consume, Fst, Snd, Copy, First, Second, (:|||))
+import Syntax.StateMachine.Typed hiding (Consume, Fst, Snd, Copy, First, Second)
 import Syntax.StateMachine.Untyped
 import Syntax.Types
 
@@ -35,7 +35,7 @@ counterV1U = -- LoopU UTInt $ SecondU (DelayU UTInt (Opaque (unsafeCoerce 0))) .
   -- DistrU .>>
   -- ((SndU .>> CopyU) :.++ (SndU .>> (ConsumeU :.&& IncrU)))
   -- .>> DistrU'
-  ReadU inputV1 .>> (GetU :.++ (GetU .>> IncrU .>> PutU)) .>> ShowU outputV1
+  ReadU inputV1 .>> (GetU `CaseU` (GetU .>> IncrU .>> PutU)) .>> ShowU outputV1
 
 ------------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ counterV2 = -- Loop $ Second (Delay 0) >>>
   -- distr2 >>>
   -- ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& (Incr >>> Incr)))) :+++ (Consume :&&& (Int 0))
   -- >>> distr2'
-  (Read :: T Int String InputV2) >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
+  Read >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
 
 pattern ReadCountV2 :: InputV2
 pattern ReadCountV2  = Left ()
@@ -66,7 +66,7 @@ outputV2 = UTEither UTInt (UTEither UTUnit UTUnit)
 
 counterV2U :: U
 counterV2U =
-  ReadU inputV2 .>> (GetU :.++ (GetU .>> IncrU .>> PutU) :.++ (IntU 0 .>> PutU)) .>> ShowU outputV2
+  ReadU inputV2 .>> (GetU `CaseU` (GetU .>> IncrU .>> PutU) `CaseU` (IntU 0 .>> PutU)) .>> ShowU outputV2
 
   {-
 distr2 :: T (Either (Either a b) c, d) (Either (Either (a, d) (b, d)) (c, d))

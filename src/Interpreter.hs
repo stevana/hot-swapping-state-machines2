@@ -28,7 +28,7 @@ eval Put           = put
 eval (First f)     = \(x, y) -> eval f x >>= \x' -> return (x', y)
 eval (Second g)    = \(x, y) -> eval g y >>= \y' -> return (x, y')
 eval (f :&&& g)    = \x -> (,) <$> eval f x <*> eval g x
-eval (_f :||| _g)  = undefined
+-- eval (_f :||| _g)  = undefined
 eval (Case f g)    = either (fmap Left . eval f) (fmap Right . eval g)
 eval Read          = return . read
 eval Show          = return . show
@@ -53,7 +53,7 @@ evalS (First f)     = zipS . first (evalS f) . unzipS
 evalS (Second g)    = zipS . second (evalS g) . unzipS
 evalS (f :&&& g)    = zipS . (evalS f A.*** evalS g) . unzipS . evalS Copy -- XXX: awkward
 -- evalS (Delay x)     = undefined -- Cons x
-evalS (_f :||| _g)    = undefined -- mapS $ either (evalS f) (evalS g)
+-- evalS (_f :||| _g)    = undefined -- mapS $ either (evalS f) (evalS g)
 evalS (Case f g)    = \xs -> combineS xs . bimap (evalS f) (evalS g) . splitS $ xs -- mapS . bimap (evalS f) (evalS g)
 -- evalS Distr         = mapS $ \(e, c) -> case e of
 --                                   Left  x -> Left  (x, c)
