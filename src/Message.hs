@@ -1,5 +1,3 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 module Message where
@@ -22,14 +20,13 @@ instance Read MaybeSocket where
     Ident "Nothing" <- lexP
     return (MaybeSocket Nothing)
 
-data Msg a where
-  Item    :: MaybeSocket -> a -> Msg a
-  Upgrade :: MaybeSocket -> Name -> UpgradeData_ -> Msg a
-  UpgradeSucceeded :: MaybeSocket -> Name -> Msg a
-  UpgradeFailed :: MaybeSocket -> Name -> Msg a
-  Done :: Msg a
-deriving instance Show a => Show (Msg a)
-deriving instance Read a => Read (Msg a)
+data Msg a
+  = Item MaybeSocket a
+  | Upgrade MaybeSocket Name UpgradeData_
+  | UpgradeSucceeded MaybeSocket Name
+  | UpgradeFailed MaybeSocket Name
+  | Done
+  deriving (Show, Read)
 
 pattern Item_ :: a -> Msg a
 pattern Item_ x = Item (MaybeSocket Nothing) x
