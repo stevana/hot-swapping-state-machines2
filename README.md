@@ -1,4 +1,4 @@
-# Zero downtime upgrades of stateful systems
+# Zero-downtime upgrades of stateful systems
 
 *Work in progress, please don't share, but do feel free to get involved!*
 
@@ -10,38 +10,66 @@ adding new features to patching a bug and potentially fixing a broken state.
 Even though upgrades are an essential part of software maintenance, programming
 languages tend to not help the programmer deal with them in any way.
 
-Some languages are easier to deploy than others. For example due to static and
-cross compilation, targeting an infrequently changing VM, or by being
-interpreted. The ease of deployment is only one part of upgrades though.
-
-In stateful systems we want to preserve the state...
-
-Lisp, Smalltalk, fix-and-continue when debugging? REPL into production?
-
 Erlang OTP perhaps being one exception, although from what I understand, even
 there hot-code swapping is not really recommended in production.
 
 OTP application and release are library constructs to help with deployment and
 upgrades.
 
+Erlang the movie example...
+
+Lisp, Smalltalk, fix-and-continue when debugging? REPL into production? Late
+binding helps?
+
 What would good support for upgrades look like?
 
 * No downtime
 * Seamless, don't interrupt existing client connections / sessions
+  - In stateful systems we want to preserve the state...
 * Typed state migrations
 * Backwards and forwards compatbility?
+* Atomic (succeed or fail and rollback)
+* Downgrades?
+* (Signed, periodic... c.f. TUF)
+* Live coding?
 
 ## Constraints
 
-What exactly are upgrades?
+We've defined some desirable characteristics of upgrades.
 
-What are programs?
+Next let's define what we mean by upgrades.
 
-* Upgrades of from arbitrary program to arbitrary program is too messy
+The first question is upgrades of *what* exactly?
+
+There's different kinds of software systems one might want to upgrade.
+  - client only, downtime is typically not a problem
+    + typically handled by the OS's package manager
+    + live coding?
+    + [HotSwap for
+      bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/)
+  - stateless
+  - stateful, e.g. FTP?!
+  - distributed with fault tolerance, rotating upgrades (compatibility)
+  - local-first?
+
+* Let's focus on stateful systems that are not distributed
+  - sweet spot for this technique, even though the technique might simplify
+    upgrades in other settings or potentially enable possibilities (debugging /
+    live coding, etc)
+
+* Within a system, how do we represent the client and potential server *programs*?
+
+* Specific programming language? Lambda calculus? Turing machines?
+  - Too clumsy, too low-level
+  - perfect machine model would step-for-step simulation of any algorithm
+  - for any algorithm, there's an asm with the same states and the same
+    transition function.
 
 * Abstract state machine, model of computation that allows us to express the
   problem at the right level of abstration
   - gen_server, important building block from OTP
+
+* Second question: in this model of computation, what are upgrades exactly?
 
 * Refinement of state machines gives us a model of updates, perhaps even clearer
   when looking at indexed containers and their morphisms?
@@ -52,6 +80,9 @@ What are programs?
 * A simple way adding parallelism: pipelines
 
 ## Plan
+
+* I hope that the abstract theory helps explain where my ideas are coming from,
+  now let's make things concrete with some code
 
 * Linear pipelines, to keep things simple
 
@@ -100,7 +131,9 @@ f >>> g = g `Compose` f
 ```
 
 (The initiated might recognise that this is an instance of `Category` and
-partially an instance of `Cocartesian`, plus some extras.)
+partially an instance of `Cocartesian`, plus some extras. In a "real"
+implementation we would want this datatype to be an instance of `Cocartesian`
+instance as well as `Cartesian`.)
 
 ### Example
 
@@ -231,8 +264,6 @@ deploy (SM name s0 f0) q = do
   return q'
 ```
 
-XXX: types don't change?!
-
 ### Upgrades
 
 Upgrades are sent over the wire in a serialised format and deserialised at the
@@ -251,8 +282,7 @@ upgrades, which can easily be serialised and deserialised, and then use
 
 ```haskell
 data UpgradeData_ = UpgradeData_
-  { oldState        :: Ty_
-  , newState        :: Ty_
+  { newState        :: Ty_
   , newInput        :: Ty_
   , newOutput       :: Ty_
   , newStateMachine :: U
@@ -274,16 +304,16 @@ typed types which we then typecheck the new state machine and migration function
 against.
 
 ```haskell
-typeCheckUpgrade :: forall s s' a b. (Typeable s, Typeable a, Typeable b)
+typeCheckUpgrade :: forall s a b. (Typeable s, Typeable a, Typeable b)
                  => s -> T s a b -> UpgradeData_ -> Maybe (UpgradeData s a b)
-typeCheckUpgrade _s _f (UpgradeData_ t_ t'_ a'_ b'_ f_ g_) =
-  case (inferTy t_, inferTy t'_, inferTy a'_, inferTy b'_) of
-    (ETy (t :: Ty t), ETy (t' :: Ty t'), ETy (a' :: Ty a'), ETy (b' :: Ty b')) -> do
+typeCheckUpgrade _s _f (UpgradeData_ s'_ a'_ b'_ f_ g_) =
+  case (inferTy s'_, inferTy a'_, inferTy b'_) of
+    (ETy (s' :: Ty s'), ETy (a' :: Ty a'), ETy (b' :: Ty b')) -> do
       Refl <- eqT @a @a'
       Refl <- eqT @b @b'
-      Refl <- eqT @s @t
+      Refl <- eqT @s @s'
       f <- typeCheck f_
-      g <- typeCheck g_ TUnit t t
+      g <- typeCheck g_ TUnit s' s'
       return (UpgradeData f g)
 ```
 Where untyped types are defined as follows:
@@ -364,7 +394,8 @@ stdin/stdout, files, and TCP streams.
 We can then implement a run function with the following type:
 
 ```haskell
-run :: (Typeable a, Typeable b) => Source a -> Codec (Msg a) (Msg b) -> P a b -> Sink b r -> IO r
+run :: (Typeable a, Typeable b)
+    => Source a -> Codec (Msg a) (Msg b) -> P a b -> Sink b r -> IO r
 ```
 
 Where `Codec a b` contains a deserialiser from `ByteString` to `Maybe a` and a
@@ -412,14 +443,13 @@ Item "Right ()"
 Item "Left 2"               -- The value is now 2
 ```
 
+At this point, let's imagine we want to add a reset feature to our counter.
+Reset takes no argument and returns nothing, so we use the unit type in both the
+input and output types.
 
 ```haskell
 type InputV2  = Either () InputV1
 type OutputV2 = Either () OutputV1
-
-counterV2 :: T Int String String
-counterV2 =
-  Read >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
 
 pattern ReadCountV2 :: InputV2
 pattern ReadCountV2  = Left ()
@@ -431,9 +461,19 @@ pattern ResetCountV2 :: InputV2
 pattern ResetCountV2 = Right (Right ())
 ```
 
+The state machine looks the same, except for the last `Case` where we update the
+state to be `0`, thus resetting the counter.
 
 ```haskell
+counterV2 :: T Int String String
+counterV2 =
+  Read >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
+```
 
+Back in our REPL we can now do the upgrade, by sending over a type `erase`d
+version of `counterV2`.
+
+```haskell
 let msg :: Msg ()
     msg = Upgrade Nothing "counter"
             (UpgradeData_ UTInt UTInt UTString UTString (erase counterV2) IdU)
@@ -444,29 +484,63 @@ nc "127.0.0.1" 3000 (Item Nothing (show ResetCountV2))
 nc "127.0.0.1" 3000 (Item Nothing (show ReadCountV2))
 ```
 
+Which yields the following annotated output.
+
 ```
 UpgradeSucceeded "counter"
-Item "Left 2"               -- The counter's state is preserved by the upgrade
-Item "Right (Right ())"     -- Reset the counter.
-Item "Left 0"               -- The value is back to 0.
+Item "Left 2"              -- The counter's state is preserved by the upgrade.
+Item "Right (Right ())"    -- Reset the counter.
+Item "Left 0"              -- The value is back to 0.
 ```
 
+## Discussion and future work
 
-## Future work
+Here are a bunch of things I've thought of but not done yet:
 
-- [ ] Upgrades that change the state type
-- [ ] Upgrade pipelines, rather than state machines running in the pipelines;
-- [ ] Upgrade the platform/language/VM without downtime?
-- [ ] Compiled rather than interpreted?
-- [ ] Better language for describing state machines?
-- [ ] Content-addressed hashes?
-- [ ] Combining multiple sources?
-- [ ] Multiple sinks? `Tee :: P a b -> Sink a () -> P a b`?
-- [ ] Blocking file I/O, let it block and rely on pipelining parallelism and sharding
-- [ ] How to we build something like a HTTP-based API on top of the TCP stuff?
+1. Notice how the type of `counterV1` and `counterV2` is the same. I think the
+   input and output types perhaps need to stay the same, otherwise we wouldn't
+   be able to perform the upgrade in the `deploy` function because the types of
+   the input and output queues cannot change (that's why we set them both to be
+   `String` and made deserialisation and serialisation part of the upgrade, thus
+   allowing for changes in the inputs and outputs). I think that the state type
+   is different though, and we should be able to change that during an upgrade;
+2. To support backwards compatibility we'd need to deploy the new state machine
+   next to the old one and choose which to use as part of parsing the client
+   request (i.e. if client is on an old version redirect it to the old state
+   machine). We'd probably want to also tell the old clients that they should
+   upgrade and in some subsequent upgrade we'd want to remove support for the
+   old API;
+3. We've seen upgrades of state machines running on top of pipelines, but what
+   if we wanted to change the pipelines themselves? This seems tricker. Perhaps
+   can start by thinking about what kind of changes one would like to allow,
+   e.g. prepending or appending something to a pipeline seems easier than
+   changing some part in the middle?
+4. The state machine are represented by first-order datatypes, that get
+   typechecked and then interpreted. What would upgrades look like if we wanted
+   to state machines to be compiled rather than interpreted?
+5. Writing state machines and pipelines using combinators is not fun, can we
+   have something like Haskell's arrow syntax at the very least? C.f. Conal
+   Elliott's [*Compiling to
+   categories*](http://conal.net/papers/compiling-to-categories/) and Oleg
+   Grenrus'
+   [*Overloaded.Categories*](https://hackage.haskell.org/package/overloaded-0.3.1/docs/Overloaded-Categories.html);
+6. One advantage with the combinators is that they don't contain variables, so
+   it should be easier to do something like Unison does with content-addressed
+   hashes?
+7. On the pipeline level we might want to support multiple sources
+   (`Alternative` instance?), multiple sinks (perhaps via something like `Tee ::
+   P a b -> Sink a () -> P a b`?), fanout and sharding as well as making
+   everything efficient (as I've written about
+   [earlier](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html));
+8. Finally we also need to figure out how to we build something more
+   complicated, like a HTTP-based API, on top of the TCP stuff.
 
+If any of the above sounds interesting, please do feel free to get involved!
 
-## Contributing
+## Running the code
+
+The easiest way to get the code running is probably using the [Nix package
+manager](https://nixos.org/download).
 
 ```bash
 git clone https://github.com/stevana/arrow-loop-state-machines.git
@@ -475,23 +549,22 @@ nix-shell
 cabal repl
 ```
 
+Although using [GHCup](https://www.haskell.org/ghcup/) should work too, if you
+replace `nix-shell` with `ghcup install ghc 9.8.1`.
+
 ## See also
 
 * [Parallel stream processing with zero-copy fan-out and
   sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html);
-
 * [Hot-swapping state
   machines](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html);
-
 * [Application architecture as
-  code](https://www.youtube.com/watch?v=vasvpFRPx9c)
+  code](https://www.youtube.com/watch?v=vasvpFRPx9c);
 * [IxC: Infrastructure as Code, from Code, with
-  Code](https://architectelevator.com/cloud/iac-ifc-trends/)
+  Code](https://architectelevator.com/cloud/iac-ifc-trends/);
 * [Benthos: fancy stream processing made operationally
-  mundane](https://www.benthos.dev/)
-
+  mundane](https://www.benthos.dev/);
 * Hot-swapping in
-  [Elm](https://web.archive.org/web/20131006235603/http://elm-lang.org/blog/Interactive-Programming.elm)
-
-* https://github.com/nmattia/haskell-hot-swap
-* https://github.com/fbsamples/ghc-hotswap/
+  [Elm](https://web.archive.org/web/20131006235603/http://elm-lang.org/blog/Interactive-Programming.elm);
+* https://github.com/nmattia/haskell-hot-swap;
+* https://github.com/fbsamples/ghc-hotswap/.
