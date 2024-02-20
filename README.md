@@ -10,18 +10,24 @@ adding new features to patching a bug and potentially fixing a broken state.
 Even though upgrades are an essential part of software maintenance, programming
 languages tend to not help the programmer deal with them in any way.
 
-Erlang OTP perhaps being one exception, although from what I understand, even
-there hot-code swapping is not really recommended in production.
+There's one exception, that I know of, Erlang/OTP. In OTP there are library
+constructs for *applications* and *releases*, which can be used to hotswap code
+with zero-downtime.
 
-OTP application and release are library constructs to help with deployment and
-upgrades.
+If you haven't seen Erlang's hotswapping feature before, then you might want to
+have a look at [Erlang the movie](https://www.youtube.com/watch?v=xrIjfIjssLE),
+which contains an example of this.
 
-Erlang the movie example...
+If you prefer reading over watching, then I've written an earlier
+[post](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html)
+which starts off by explaining a REPL session which does an upgrade.
 
-Lisp, Smalltalk, fix-and-continue when debugging? REPL into production? Late
-binding helps?
+Lisp and Smalltalk
+[fix-and-continue](https://lispcookbook.github.io/cl-cookbook/debugging.html#resume-a-program-execution-from-anywhere-in-the-stack)
+when debugging? REPL into production? Late binding helps?
 
-What would good support for upgrades look like?
+Let's take a step back and ask ourselves: what would good support for upgrades
+look like?
 
 * No downtime
 * Seamless, don't interrupt existing client connections / sessions
@@ -31,31 +37,77 @@ What would good support for upgrades look like?
 * Atomic (succeed or fail and rollback)
 * Downgrades?
 * (Signed, periodic... c.f. TUF)
+* Fix-and-continue debugging?
 * Live coding?
 
-## Constraints
+In the rest of this post I'd like to explore how we can achieve some of this.
 
-We've defined some desirable characteristics of upgrades.
+## State machines and upgrades
 
-Next let's define what we mean by upgrades.
+Having defined some desirable characteristics of upgrades, let's move on to
+defining what we mean by upgrades.
 
 The first question is upgrades of *what* exactly?
 
 There's different kinds of software systems one might want to upgrade.
-  - client only, downtime is typically not a problem
-    + typically handled by the OS's package manager
-    + live coding?
-    + [HotSwap for
-      bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/)
-  - stateless
-  - stateful, e.g. FTP?!
-  - distributed with fault tolerance, rotating upgrades (compatibility)
-  - local-first?
+
+  1. Client-only, e.g. a compiler, editor, or some command line utility which
+     runs locally on your computer and doesn't interact with any server.
+     Downtime is typically not a problem, and the state of the program is
+     typically saved to disk. The operating system's package mangager typically
+     takes care of the upgrades, with minimal user involvement. However there
+     are situations where one might like to perform an upgrade without first
+     terminating the old version of a client-only application, e.g. [live-coding
+     music](https://en.wikipedia.org/wiki/TidalCycles) or when working with
+     large data sets, e.g. in
+     [bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/);
+
+  2. Client-server applications where the target of the upgrade is a *stateless*
+     component of the server, e.g. a front-end or a REST API. The stateless
+     components typically retrive the state they need to service a request from
+     a stateful component, e.g. a database, but they don't maintain any state of
+     their own, which makes stateless components easier to upgrade. A common
+     strategy is to stick a load balancer in-front of the stateless
+     component(s), spin up the new version of the component while keeping the
+     old version around, and then (slowly) migrate traffic over to the new
+     version. Notice that this wouldn't necessarily work if there was state in
+     the components, as then the state of the old and new versions of the
+     components might diverge and potentially have unexpected results;
+
+  3. Client-server applications where the target of the upgrade is a *stateful*
+     component of the server, e.g. a database or a service with a stateful
+     protocol like FTP. Databases were designed for supporting upgrades, with
+     features like schema migrations and replication. The high-level idea would
+     be to spin up the new version, take a snapshot of the old database, start
+     logically replicating all new requests from the old to the new database
+     while also restoring the snapshot to the new database, once the new
+     database has caught up, we can switch over and tear down the old database.
+     Depending on the volume and traffic this can still be a difficult operation.
+
+     A service like FTP, where once the user is connected they can "move around"
+     by e.g. changing the working directory and list the contents of the current
+     working directory, are typically not possible to upgrade without downtime.
+     The problem is that the response of one command depends on the history of
+     previous commands in that user sessions, and this state is transient;
+
+  4. Distributed stateful systems, e.g. a distributed key-value database. This
+     is similar to the above, but the replication of data is performed all the
+     time rather than only at the moment an upgrade is performed. The
+     disadvantage is that we need more hardware and bandwidth, but on the other
+     hand it makes upgrades much easier. Distributed systems can typically
+     tolerate and repair some amount of faulty replicas, which allows for
+     rolling upgrades where we replace one of the server components at the time;
+
+  5. There's also [local-first](https://www.inkandswitch.com/local-first/)
+     systems, which are different than all above. I've not had a chance to think
+     about upgrades in that context, so I won't talk about them any further.
 
 * Let's focus on stateful systems that are not distributed
   - sweet spot for this technique, even though the technique might simplify
     upgrades in other settings or potentially enable possibilities (debugging /
     live coding, etc)
+  - do people avoid stateful systems because of the upgrade problem?
+      + ORM mismatch also has its problems, Thompson
 
 * Within a system, how do we represent the client and potential server *programs*?
 
@@ -67,9 +119,17 @@ There's different kinds of software systems one might want to upgrade.
 
 * Abstract state machine, model of computation that allows us to express the
   problem at the right level of abstration
+
+  - Lamport's [Computation and State
+    Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
   - gen_server, important building block from OTP
 
+- what are states?
+- What are inputs and outputs?
+
 * Second question: in this model of computation, what are upgrades exactly?
+
+* Containers and their morphisms?
 
 * Refinement of state machines gives us a model of updates, perhaps even clearer
   when looking at indexed containers and their morphisms?
@@ -97,7 +157,7 @@ There's different kinds of software systems one might want to upgrade.
 * The remote end will need to deserialise and typecheck the receiving code in
   order to assure that it's compatible with the already deployed code
 
-## How it works
+## Implementation
 
 ### State machines
 
@@ -495,6 +555,8 @@ Item "Left 0"              -- The value is back to 0.
 
 ## Discussion and future work
 
+XXX: revisit list from motivation...
+
 Here are a bunch of things I've thought of but not done yet:
 
 1. Notice how the type of `counterV1` and `counterV2` is the same. I think the
@@ -510,6 +572,8 @@ Here are a bunch of things I've thought of but not done yet:
    machine). We'd probably want to also tell the old clients that they should
    upgrade and in some subsequent upgrade we'd want to remove support for the
    old API;
+XXX: the above doesn't work, the states of the two state machines will be disjoint...
+
 3. We've seen upgrades of state machines running on top of pipelines, but what
    if we wanted to change the pipelines themselves? This seems tricker. Perhaps
    can start by thinking about what kind of changes one would like to allow,
