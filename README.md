@@ -7,38 +7,51 @@
 Most deployed programs need to be upgraded at some point. The reasons vary from
 adding new features to patching a bug and potentially fixing a broken state.
 
-Even though upgrades are an essential part of software maintenance, programming
-languages tend to not help the programmer deal with them in any way.
+Even though upgrades are an essential part of software development and
+maintenance, programming languages tend to not help the programmer deal with
+them in any way.
 
-There's one exception, that I know of, Erlang/OTP. In OTP there are library
-constructs for *applications* and *releases*, which can be used to hotswap code
-with zero-downtime.
+The situation reminds me of a remark made by Barbara Liskov about deployment of
+software (which is related to upgrades) in her Turing award
+[lecture](https://youtu.be/qAKrMdUycb8?t=3058) (2009):
+
+> "There’s a funny disconnect in how we write distributed programs. You write
+> your individual modules, but then when you want to connect them together
+> you’re out of the programming language and into this other world. Maybe we
+> need languages that are a little bit more complete now, so that we can write
+> the whole thing in the language."
+
+There's one exception, that I know of, where upgrades are talked about from
+within the language: Erlang/OTP. In OTP there's a library construct called
+*release*, which can be used to perform up- and downgrades. Furthermore, these
+up- and downgrades can hot swap the running code resulting in zero-downtime and
+no interruption of the service of connected clients.
 
 If you haven't seen Erlang's hotswapping feature before, then you might want to
-have a look at [Erlang the movie](https://www.youtube.com/watch?v=xrIjfIjssLE),
-which contains an example of this.
+have a look at the classic [Erlang the
+movie](https://www.youtube.com/watch?v=xrIjfIjssLE), which contains a
+telecommunications example of this.
 
 If you prefer reading over watching, then I've written an earlier
 [post](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html)
-which starts off by explaining a REPL session which does an upgrade.
+which starts off by explaining a REPL session which performs an upgrade (my
+example isn't nearly as cool as in the movie though).
 
-Lisp and Smalltalk
-[fix-and-continue](https://lispcookbook.github.io/cl-cookbook/debugging.html#resume-a-program-execution-from-anywhere-in-the-stack)
-when debugging? REPL into production? Late binding helps?
+What is it that Erlang's releases and hotswapping facilities do? Can we steal
+those ideas and build upon them? These are the main questions that motivated me
+in writing this post.
 
-Let's take a step back and ask ourselves: what would good support for upgrades
-look like?
+Let's take a step back, ignoring Erlang for a moment, and ask ourselves: what
+would good support for upgrades look like?
 
-* No downtime
-* Seamless, don't interrupt existing client connections / sessions
-  - In stateful systems we want to preserve the state...
-* Typed state migrations
-* Backwards and forwards compatbility?
-* Atomic (succeed or fail and rollback)
-* Downgrades?
-* (Signed, periodic... c.f. TUF)
-* Fix-and-continue debugging?
-* Live coding?
+* Zero-downtime: seamless, don't interrupt existing client connections or
+  sessions;
+* If there's any state then migrate it in a type-safe way;
+* Backwards and forwards compatbility: old clients should be able to talk to
+  newer servers, and newer clients should be able to talk to old servers;
+* Atomicity: upgrades either succeed, or fail and rollback any changes;
+* Downgrades: even if an upgrade succeeds we might want to rollback to an
+  earlier version.
 
 In the rest of this post I'd like to explore how we can achieve some of this.
 
@@ -57,11 +70,13 @@ There's different kinds of software systems one might want to upgrade.
      typically saved to disk. The operating system's package mangager typically
      takes care of the upgrades, with minimal user involvement. However there
      are situations where one might like to perform an upgrade without first
-     terminating the old version of a client-only application, e.g. [live-coding
-     music](https://en.wikipedia.org/wiki/TidalCycles) or when working with
+     terminating the old version of a client-only application, e.g. the
+     fix-and-continue debugging
+     [workflow](https://lispcookbook.github.io/cl-cookbook/debugging.html#resume-a-program-execution-from-anywhere-in-the-stack)
+     from Lisp and Smalltalk, [live-coding
+     music](https://en.wikipedia.org/wiki/TidalCycles), or when working with
      large data sets, e.g. in
      [bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/);
-
   2. Client-server applications where the target of the upgrade is a *stateless*
      component of the server, e.g. a front-end or a REST API. The stateless
      components typically retrive the state they need to service a request from
@@ -73,7 +88,6 @@ There's different kinds of software systems one might want to upgrade.
      version. Notice that this wouldn't necessarily work if there was state in
      the components, as then the state of the old and new versions of the
      components might diverge and potentially have unexpected results;
-
   3. Client-server applications where the target of the upgrade is a *stateful*
      component of the server, e.g. a database or a service with a stateful
      protocol like FTP. Databases were designed for supporting upgrades, with
@@ -88,8 +102,10 @@ There's different kinds of software systems one might want to upgrade.
      by e.g. changing the working directory and list the contents of the current
      working directory, are typically not possible to upgrade without downtime.
      The problem is that the response of one command depends on the history of
-     previous commands in that user sessions, and this state is transient;
-
+     previous commands in that user sessions, and this state is transient. If
+     you think FTP is a silly protocol (I agree), then consider the similarly
+     stateful POSIX filesystem API, with its file handles that can be opened,
+     read, writen, and closed;
   4. Distributed stateful systems, e.g. a distributed key-value database. This
      is similar to the above, but the replication of data is performed all the
      time rather than only at the moment an upgrade is performed. The
@@ -97,32 +113,44 @@ There's different kinds of software systems one might want to upgrade.
      hand it makes upgrades much easier. Distributed systems can typically
      tolerate and repair some amount of faulty replicas, which allows for
      rolling upgrades where we replace one of the server components at the time;
-
   5. There's also [local-first](https://www.inkandswitch.com/local-first/)
      systems, which are different than all above. I've not had a chance to think
      about upgrades in that context, so I won't talk about them any further.
 
-* Let's focus on stateful systems that are not distributed
-  - sweet spot for this technique, even though the technique might simplify
-    upgrades in other settings or potentially enable possibilities (debugging /
-    live coding, etc)
-  - do people avoid stateful systems because of the upgrade problem?
-      + ORM mismatch also has its problems, Thompson
+In this post I'd like to focus on upgrading stateful systems, like
+non-distributed databases and stateful services like FTP or filesystems.
+
+Stateful systems arguebly have the worst upgrade path of the ones listed above,
+making it more interesting to work on.
+
+Although I believe that the techniques can be used to simplify the other
+system's upgrades.
+
+potentially enable possibilities (debugging / live coding, etc)
+
+I feel like people tend to avoid these kind of systems, because the upgrade
+paths of the other kinds of systems are easier.
+    + ORM mismatch also has its problems, Thompson
 
 * Within a system, how do we represent the client and potential server *programs*?
 
-* Specific programming language? Lambda calculus? Turing machines?
-  - Too clumsy, too low-level
-  - perfect machine model would step-for-step simulation of any algorithm
-  - for any algorithm, there's an asm with the same states and the same
-    transition function.
+We could choose to use the syntax of a specific programming language to
+represent programs, but I'd like to be more general.
 
-* Abstract state machine, model of computation that allows us to express the
-  problem at the right level of abstration
+We could be really general and represent programs as λ-calculus terms or
+equivantly Turing machines, but that would be too too clumsy and too low-level.
 
-  - Lamport's [Computation and State
-    Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
-  - gen_server, important building block from OTP
+(Abstract) state machines have been shown by be able to capture any algorithm at
+the right level of abstraction, see Yuri Gurevich generalisation of the
+Church-Turing thesis
+
+Lamport also argues that state machines should be used in [Computation and State
+Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+
+In Erlang the most fundamental building block (behaviour) is gen_server which
+also is a state machine.
+
+* event/command sourcing, thompson
 
 - what are states?
 - What are inputs and outputs?
@@ -158,6 +186,10 @@ There's different kinds of software systems one might want to upgrade.
   order to assure that it's compatible with the already deployed code
 
 ## Implementation
+
+* Haskell, advanced type system (GADTs) help me think and express things more
+  cleanly, if anything isn't clear let me know, I'm happy to try to explain
+  things in simpler terms
 
 ### State machines
 
@@ -618,6 +650,8 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
 
 ## See also
 
+* We haven't discussed any security aspects of upgrades, for more on this topic
+  see [TUF](https://en.wikipedia.org/wiki/The_Update_Framework);
 * [Parallel stream processing with zero-copy fan-out and
   sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html);
 * [Hot-swapping state

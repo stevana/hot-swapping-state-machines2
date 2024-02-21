@@ -24,3 +24,4 @@ erase Get           = GetU
 erase Put           = PutU
 erase Read          = ReadU (error "XXX: awkward")
 erase Show          = ShowU (error "XXX: awkward")
+erase _             = undefined

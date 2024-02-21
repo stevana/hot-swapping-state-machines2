@@ -32,6 +32,9 @@ eval (f :&&& g)    = \x -> (,) <$> eval f x <*> eval g x
 eval (Case f g)    = either (fmap Left . eval f) (fmap Right . eval g)
 eval Read          = return . read
 eval Show          = return . show
+eval (Unleft f)    = go . Left
+  where
+    go = either return (go . Right) <=< eval f
 
 runT :: T s a b -> a -> s -> (b, s)
 runT f x s = runState (eval f x) s

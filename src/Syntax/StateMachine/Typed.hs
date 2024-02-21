@@ -39,8 +39,12 @@ data T s a b where
   Read    :: Read a => T s String a
   Show    :: Show a => T s a String
 
-  -- Loop    :: T s (a, s) (b, s) -> T s a b
-  -- Delay   :: a -> T s a a
+  Unleft :: T s (Either a c) (Either b c) -> T s a b
+
+  Eq  :: Eq a => T s (a, a) (Either () ())
+
+  Loop    :: T s (a, s) (b, s) -> T s a b
+  Delay   :: Show a => a -> T s a a
   -- Distr   :: T s (Either a b, c) (Either (a, c) (b, c))
   -- Distr'  :: T s (Either (a, c) (b, c)) (Either a b, c)
 
