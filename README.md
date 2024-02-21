@@ -6,7 +6,6 @@
 
 Most deployed programs need to be upgraded at some point. The reasons vary from
 adding new features to patching a bug and potentially fixing a broken state.
-
 Even though upgrades are an essential part of software development and
 maintenance, programming languages tend to not help the programmer deal with
 them in any way.
@@ -30,9 +29,8 @@ no interruption of the service of connected clients.
 If you haven't seen Erlang's hotswapping feature before, then you might want to
 have a look at the classic [Erlang the
 movie](https://www.youtube.com/watch?v=xrIjfIjssLE), which contains a
-telecommunications example of this.
-
-If you prefer reading over watching, then I've written an earlier
+telecommunications example of this. If you prefer reading over watching, then
+I've written an earlier
 [post](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html)
 which starts off by explaining a REPL session which performs an upgrade (my
 example isn't nearly as cool as in the movie though).
@@ -60,9 +58,8 @@ In the rest of this post I'd like to explore how we can achieve some of this.
 Having defined some desirable characteristics of upgrades, let's move on to
 defining what we mean by upgrades.
 
-The first question is upgrades of *what* exactly?
-
-There's different kinds of software systems one might want to upgrade.
+The first question is upgrades of *what* exactly? There's different kinds of
+software systems one might want to upgrade.
 
   1. Client-only, e.g. a compiler, editor, or some command line utility which
      runs locally on your computer and doesn't interact with any server.
@@ -122,6 +119,9 @@ non-distributed databases and stateful services like FTP or filesystems.
 
 Stateful systems arguebly have the worst upgrade path of the ones listed above,
 making it more interesting to work on.
+
+Some people might say that upgrades are a solved problem in the client-only,
+stateless and distributed stateful settings
 
 Although I believe that the techniques can be used to simplify the other
 system's upgrades.
@@ -613,7 +613,10 @@ XXX: the above doesn't work, the states of the two state machines will be disjoi
    changing some part in the middle?
 4. The state machine are represented by first-order datatypes, that get
    typechecked and then interpreted. What would upgrades look like if we wanted
-   to state machines to be compiled rather than interpreted?
+   to state machines to be compiled rather than interpreted? For some prior work
+   in Haskell see the repos
+   [`haskell-hot-swap`](https://github.com/nmattia/haskell-hot-swap) and
+   [`ghc-hotswap`](https://github.com/fbsamples/ghc-hotswap/);
 5. Writing state machines and pipelines using combinators is not fun, can we
    have something like Haskell's arrow syntax at the very least? C.f. Conal
    Elliott's [*Compiling to
@@ -650,19 +653,28 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
 
 ## See also
 
+* For many more examples of sources and sinks, see
+  [Benthos](https://www.benthos.dev/);
 * We haven't discussed any security aspects of upgrades, for more on this topic
   see [TUF](https://en.wikipedia.org/wiki/The_Update_Framework);
-* [Parallel stream processing with zero-copy fan-out and
-  sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html);
-* [Hot-swapping state
-  machines](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html);
-* [Application architecture as
-  code](https://www.youtube.com/watch?v=vasvpFRPx9c);
-* [IxC: Infrastructure as Code, from Code, with
-  Code](https://architectelevator.com/cloud/iac-ifc-trends/);
-* [Benthos: fancy stream processing made operationally
-  mundane](https://www.benthos.dev/);
-* Hot-swapping in
-  [Elm](https://web.archive.org/web/20131006235603/http://elm-lang.org/blog/Interactive-Programming.elm);
-* https://github.com/nmattia/haskell-hot-swap;
-* https://github.com/fbsamples/ghc-hotswap/.
+* As I was writing up I found this old post about hot-swapping in
+  [Elm](https://elm-lang.org/news/interactive-programming) (2013). It's even
+  more interesting considering that in Elm one is basically writing a state
+  machine;
+* Gregor Hohpe gave a talk called [Application architecture as
+  code](https://www.youtube.com/watch?v=vasvpFRPx9c) at AWS re:Invent 2023,
+  where he also describes pipelines as code which later gets deployed to AWS. He
+  doesn't mention upgrades, but surely they must have thought about it? He also
+  wrote about the topic [here](https://architectelevator.com/cloud/iac-ifc-trends/);
+* I've written about upgrading state machines only (as opposed to pipelines with
+  state machines in them) in an earlier
+  [post](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html)
+  (2023). I consider this post a successor of the earlier approach, but the old
+  post still contains some aspects that can be useful and not covered here;
+* For non-linear pipelines and a more efficient implementation of them, see my
+  older post called [Parallel stream processing with zero-copy fan-out and
+  sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html)
+  (2024);
+* Backwards and forwards compatibility is also related to schema evolution,
+  which I've written more about
+  [here](https://stevana.github.io/working_with_binary_data.html) (2023).
