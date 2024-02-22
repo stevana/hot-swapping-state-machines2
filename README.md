@@ -22,9 +22,10 @@ software (which is related to upgrades) in her Turing award
 
 There's one exception, that I know of, where upgrades are talked about from
 within the language: Erlang/OTP. In OTP there's a library construct called
-*release*, which can be used to perform up- and downgrades. Furthermore, these
-up- and downgrades can hot swap the running code resulting in zero-downtime and
-no interruption of the service of connected clients.
+[*release*](https://www.erlang.org/doc/design_principles/release_structure),
+which can be used to perform up- and downgrades. Furthermore, these up- and
+downgrades can hot swap the running code resulting in zero-downtime and no
+interruption of the service of connected clients.
 
 If you haven't seen Erlang's hotswapping feature before, then you might want to
 have a look at the classic [Erlang the
@@ -53,13 +54,17 @@ would good support for upgrades look like?
 
 In the rest of this post I'd like to explore how we can achieve some of this.
 
-## State machines and upgrades
+## Terminology
 
 Having defined some desirable characteristics of upgrades, let's move on to
 defining what we mean by upgrades.
 
-The first question is upgrades of *what* exactly? There's different kinds of
-software systems one might want to upgrade.
+There are two notions I'd like clarify: what kind of software systems the
+upgrades are targeting, and then how we represent programs and their upgrades.
+
+### Software systems
+
+There's different kinds of software systems one might want to upgrade.
 
   1. Client-only, e.g. a compiler, editor, or some command line utility which
      runs locally on your computer and doesn't interact with any server.
@@ -100,7 +105,7 @@ software systems one might want to upgrade.
      working directory, are typically not possible to upgrade without downtime.
      The problem is that the response of one command depends on the history of
      previous commands in that user sessions, and this state is transient. If
-     you think FTP is a silly protocol (I agree), then consider the similarly
+     you think FTP is a silly protocol (it's), then consider the similarly
      stateful POSIX filesystem API, with its file handles that can be opened,
      read, writen, and closed;
   4. Distributed stateful systems, e.g. a distributed key-value database. This
@@ -132,40 +137,135 @@ I feel like people tend to avoid these kind of systems, because the upgrade
 paths of the other kinds of systems are easier.
     + ORM mismatch also has its problems, Thompson
 
-* Within a system, how do we represent the client and potential server *programs*?
+### Programs and their upgrades
+
+Having defined what kind of systems we'd like to upgrade, let's turn our
+attention to how we can represent programs and their upgrades.
 
 We could choose to use the syntax of a specific programming language to
-represent programs, but I'd like to be more general.
+represent programs, but programming languages tend to be too big and complicated.
 
-We could be really general and represent programs as λ-calculus terms or
-equivantly Turing machines, but that would be too too clumsy and too low-level.
+We could be general and represent programs as λ-calculus terms or equivantly
+Turing machines, but that would be too clumsy and too low-level.
 
-(Abstract) state machines have been shown by be able to capture any algorithm at
-the right level of abstraction, see Yuri Gurevich generalisation of the
-Church-Turing thesis
+A happy middle ground, which is easy to implement in any programming language
+while at the same time expressive enough to express any algorithm at a desired
+level of abstraction[^1], is the humble state machine.
 
-Lamport also argues that state machines should be used in [Computation and State
-Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+There are different ways to define state machines, we'll go for a defintion
+which is a simple function from some input and a state to a pair of some output
+and a new state:
 
-In Erlang the most fundamental building block (behaviour) is gen_server which
-also is a state machine.
+```
+  input -> state -> (state, output)
+```
 
-* event/command sourcing, thompson
+where inputs, states and outputs are algebraic datatypes (records/structs and
+tagged unions).
 
-- what are states?
-- What are inputs and outputs?
+To make things concrete, let's consider an example state machine of a counter.
+One way to define a such counter is to `{readCount, incrCount}` as input,
+the state can be an integer and the output to be a tagged union where in the
+read case we return an integer and in the increment case we return an
+acknowledgement (unit or void type). Given these types, the state machine
+function of the counter can be defined as follows:
 
-* Second question: in this model of computation, what are upgrades exactly?
+```
+  counter(input, state) = case input of
+    readCount -> (state,     {.tag = read, .value = state})
+    incrCount -> (state + 1, {.tag = incr})
+```
 
-* Containers and their morphisms?
+Assuming our programs are such state machines, what would it mean to upgrade
+them? I think this is where having a simple representation of programs where all
+of the state is explicit starts to shine. By merely looking at the function type
+of a state machine, we can see that it would make sense to be able to:
 
-* Refinement of state machines gives us a model of updates, perhaps even clearer
-  when looking at indexed containers and their morphisms?
+  1. Extend the input type with more cases, e.g. a `resetCount` which sets the
+     new state to `0`;
+  2. Refine an existing output with more data, e.g. we could return the old
+     count when we increment;
+  3. Extending the state, e.g. we could add a boolean to the state which
+     determines if we should increment by +1 or -1 (i.e. decrementing);
+  4. Refine an existing input, e.g. make `incrCount` have an integer value
+     associated with it which determines by how much we want to increment.
 
-* SMs and actors, messy call graph vs dag (["pipeline-oriented
-  programming"](https://youtu.be/ipceTuJlw-M?t=493))
+I don't know if the above list complete, but it's a start.
 
-* A simple way adding parallelism: pipelines
+If we go back to the list of criteria for good upgrade support, we can see how
+some of the items there are more tangible now.
+
+For example, typed state migations means that if we change the state type from
+`state` to `state'` then when we migrate to old to the new state using a
+function `state -> state'`.
+
+Similarly, what it means to support backwards compatibility is more clear now.
+Imagine we upgrade from a server state machine:
+```
+  input -> state -> (output, state)
+```
+
+to a new version that has the following type:
+
+```
+  input' -> state' -> (output', state')
+```
+
+What would it take to still be able to serve old clients which make requests
+using the old `input` type? If we had a function from `input -> input'` we could
+upgrade the request, feed it to the new state machine and get an `output'` back,
+we then see that we'd also need a way to downgrade the output, i.e. a function
+`output' -> output`[^2].
+
+Forward compatibility, i.e. an upgraded client sends an `input'` to a server
+which haven't been upgraded yet (i.e. expects `input`), is a bit more tricky,
+but again at least we can now start to be able to talk about these things in a
+more concrete way.
+
+One last thing with regard to how to represent programs. Our state machines run
+entirely sequentially, which is a problem if we want to implement servers that
+can handle more than one client at the time.
+
+A simple way adding parallelism is make it possible to construct pipelines of
+state machines, where the state machines run in parallel. Picture the state
+machines as processing stages on a conveyor belt.
+
+![](https://raw.githubusercontent.com/stevana/arrow-loop-state-machines/main/data/bottling_factory.png)
+
+The conveyor belt in our case will be queues which connect the state machines.
+
+A typical TCP-based service can then be composed of a pipeline that:
+
+  1. accepts new connections/sockets from a client;
+  2. waits for some of the accepted sockets to be readable (this requries some
+     `select/poll`-like constructs);
+  3. recv the bytes of a request;
+  4. deserialise the request bytes into an input;
+  5. process the input using the a state machine to produce an output
+     (potentially reading and writing to disk);
+  6. serialise the output into a response in bytes;
+  7. wait for the socket to be writeable;
+  8. send the response bytes back to the client and close the socket.
+
+Each of these stages could be a state machine which runs in parallel with all
+the other stages, but we can also imagine grouping stages together into bigger
+state machines, or even making some of this part of the pipeline infrastructure
+or runtime system.
+
+If stage 5 needs to read and write to the disk, then it can be broken up in
+three stages: read, run the state machine, write.
+
+That way the main application logic (the state machine that transforms inputs
+into outputs) can be run a its own CPU/core
+
+Martin Thompson et al
+
+If a stage is slow, we can shard it... Jim Gray
+
+
++ SMs and actors, messy call graph vs dag
+  - determinism, simulation testing
+
 
 ## Plan
 
@@ -173,6 +273,7 @@ also is a state machine.
   now let's make things concrete with some code
 
 * Linear pipelines, to keep things simple
+
 
 * Each stage of the pipeline runs in parallel with all other stages, thus giving
   us pipelining parallelism a la assembly lines
@@ -634,6 +735,9 @@ XXX: the above doesn't work, the states of the two state machines will be disjoi
 8. Finally we also need to figure out how to we build something more
    complicated, like a HTTP-based API, on top of the TCP stuff.
 
+  XXX: (["pipeline-oriented
+    programming"](https://youtu.be/ipceTuJlw-M?t=493))
+
 If any of the above sounds interesting, please do feel free to get involved!
 
 ## Running the code
@@ -678,3 +782,21 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
 * Backwards and forwards compatibility is also related to schema evolution,
   which I've written more about
   [here](https://stevana.github.io/working_with_binary_data.html) (2023).
+
+
+[^1]: See Yuri Gurevich's abstract state machines and their generalisation of
+    the Church-Turing thesis.
+
+(Abstract) state machines have been shown by be able to capture any algorithm at
+the right level of abstraction,
+
+Lamport also argues that state machines should be used in [Computation and State
+Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+
+In Erlang the most fundamental building block (behaviour) is gen_server which
+also is a state machine.
+
+* event/command sourcing, thompson
+
+[^2]: Refinement of state machines gives us a model of updates, perhaps even clearer
+  when looking at indexed containers and their morphisms?
