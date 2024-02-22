@@ -1,6 +1,9 @@
-# Zero-downtime upgrades of stateful systems
+# Towards zero-downtime upgrades of stateful systems
 
 *Work in progress, please don't share, but do feel free to get involved!*
+
+In this post I'd like to explore one possible way we might be able to achieve
+zero-downtime upgrades of stateful systems.
 
 ## Motivation
 
@@ -164,16 +167,17 @@ where inputs, states and outputs are algebraic datatypes (records/structs and
 tagged unions).
 
 To make things concrete, let's consider an example state machine of a counter.
-One way to define a such counter is to `{readCount, incrCount}` as input,
+One way to define a such counter is to `{ReadCount, IncrCount}` as input,
 the state can be an integer and the output to be a tagged union where in the
 read case we return an integer and in the increment case we return an
 acknowledgement (unit or void type). Given these types, the state machine
 function of the counter can be defined as follows:
 
-```
-  counter(input, state) = case input of
-    readCount -> (state,     {.tag = read, .value = state})
-    incrCount -> (state + 1, {.tag = incr})
+```python
+def counter(input: Input, state: int) -> (int, int | None):
+  match input:
+    case Input.ReadCount: return (state, state)
+    case Input.IncrCount: return (state + 1, None)
 ```
 
 Assuming our programs are such state machines, what would it mean to upgrade
@@ -181,13 +185,13 @@ them? I think this is where having a simple representation of programs where all
 of the state is explicit starts to shine. By merely looking at the function type
 of a state machine, we can see that it would make sense to be able to:
 
-  1. Extend the input type with more cases, e.g. a `resetCount` which sets the
+  1. Extend the input type with more cases, e.g. a `ResetCount` which sets the
      new state to `0`;
   2. Refine an existing output with more data, e.g. we could return the old
      count when we increment;
   3. Extending the state, e.g. we could add a boolean to the state which
      determines if we should increment by +1 or -1 (i.e. decrementing);
-  4. Refine an existing input, e.g. make `incrCount` have an integer value
+  4. Refine an existing input, e.g. make `IncrCount` have an integer value
      associated with it which determines by how much we want to increment.
 
 I don't know if the above list complete, but it's a start.
@@ -270,16 +274,22 @@ CPU/core while odd numbered requests go to the other. That way we effectively
 double the throughput, without breaking determinism (as opposed to when worker
 pools are used).
 
-
 Let me just leave you with one final image: I like to think of state machines on
-top of pipelines as a limited form of actors or Erlang processes that cannot
-send messages to which other process they like (graph-like structure), but
-rather only downstream (DAG-like structure).
+top of pipelines as a limited form of actors or Erlang processes (or
+`gen_server`s more precisely) that cannot send messages to which other process
+they like (graph-like structure), but rather only downstream (DAG-like
+structure).
 
 This restriction makes it easier to make everything deterministic, which in turn
 makes it easier to (simulation) test.
 
-## Plan
+It should also make it possible for the implementation to be more efficient. For
+example, if we want to have a pipeline that takes the output of one state
+machine and broadcasts it to two other state machines (on the same computer)
+then in Erlang the output would be copied to the two machines downstream,
+whereas with pipelines we can do it without copying.
+
+## Implementation
 
 * I hope that the abstract theory helps explain where my ideas are coming from,
   now let's make things concrete with some code
@@ -297,8 +307,6 @@ makes it easier to (simulation) test.
 
 * The remote end will need to deserialise and typecheck the receiving code in
   order to assure that it's compatible with the already deployed code
-
-## Implementation
 
 * Haskell, advanced type system (GADTs) help me think and express things more
   cleanly, if anything isn't clear let me know, I'm happy to try to explain
@@ -810,5 +818,20 @@ also is a state machine.
 
 * event/command sourcing, thompson
 
-[^2]: Refinement of state machines gives us a model of updates, perhaps even clearer
-  when looking at indexed containers and their morphisms?
+[^2]: Many years ago I had the pleasure to study interaction structures (aka
+    index containers aka polynomial functors). One of many possible way to view
+    these structures is as if they are state machines. One can construct a
+    category with the objects being interaction structures and then think about
+    what the morphisms must look like in order to satisfy the necessary
+    categorical laws.
+
+    I don't know much about category theory myself, but I remember that the
+    morphisms in the resulting category have two components and they look
+    exactly like those that we needed to be able to support backwards
+    compatibility.
+
+    There's also a strong [connection](https://arxiv.org/abs/0905.4063v1)
+    between this category and stepwise refinement or refinement calculus, which
+    at least intuitively has some connection with upgrades.
+
+    I suppose that there are more useful ideas to steal from there.
