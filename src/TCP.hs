@@ -39,6 +39,8 @@ tcpSource mhost port c q = do
 
     loop sock = forever $ do
       bracketOnError (accept sock) (close . fst) $ \(conn, _peer) ->
+        -- XXX: We probably want to have a max open connections here and do
+        -- timeouts on the waiting.
         void $ forkIO $ withFdSocket conn $ \fd -> do
           threadWaitRead (fromIntegral fd)
           try (recv conn 1024) >>= \case
@@ -59,6 +61,9 @@ tcpSink c q = forever $ do
       sendAll sock (encode c msg) `finally` gracefulClose sock 5000
 
 ------------------------------------------------------------------------
+
+nc :: Show a => HostName -> Int -> Msg a -> IO ()
+nc host port req = ncDelay host port 0 0 req
 
 ncDelay :: Show a => HostName -> Int -> Int -> Int -> Msg a -> IO ()
 ncDelay host port0 sendDelayMs recvDelayMs req =
@@ -83,6 +88,3 @@ ncDelay host port0 sendDelayMs recvDelayMs req =
         open addr = bracketOnError (openSocket addr) close $ \sock -> do
           connect sock $ addrAddress addr
           return sock
-
-nc :: Show a => HostName -> Int -> Msg a -> IO ()
-nc host port req = ncDelay host port 0 0 req

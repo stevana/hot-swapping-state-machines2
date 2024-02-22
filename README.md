@@ -232,7 +232,8 @@ machines as processing stages on a conveyor belt.
 
 ![](https://raw.githubusercontent.com/stevana/arrow-loop-state-machines/main/data/bottling_factory.png)
 
-The conveyor belt in our case will be queues which connect the state machines.
+The conveyor belt in our case, i.e. our pipeline, will be queues which connect
+the state machines.
 
 A typical TCP-based service can then be composed of a pipeline that:
 
@@ -253,19 +254,30 @@ state machines, or even making some of this part of the pipeline infrastructure
 or runtime system.
 
 If stage 5 needs to read and write to the disk, then it can be broken up in
-three stages: read, run the state machine, write.
+three stages: read from disk, run the state machine, write to disk (possibily in
+batched fashion).
 
 That way the main application logic (the state machine that transforms inputs
-into outputs) can be run a its own CPU/core
+into outputs) can be run a its own CPU/core.
 
-Martin Thompson et al
+Structuring services in this pipeline fashion was advocated by the late Jim Gray
+and more recently Martin Thompson et al have been giving talks using a similar
+approach.
 
-If a stage is slow, we can shard it... Jim Gray
+If a stage is slow, we can shard (or partition, using Jim's terminology) it by
+dedicating another CPU/core to that stage and have even numbered requests to one
+CPU/core while odd numbered requests go to the other. That way we effectively
+double the throughput, without breaking determinism (as opposed to when worker
+pools are used).
 
 
-+ SMs and actors, messy call graph vs dag
-  - determinism, simulation testing
+Let me just leave you with one final image: I like to think of state machines on
+top of pipelines as a limited form of actors or Erlang processes that cannot
+send messages to which other process they like (graph-like structure), but
+rather only downstream (DAG-like structure).
 
+This restriction makes it easier to make everything deterministic, which in turn
+makes it easier to (simulation) test.
 
 ## Plan
 
@@ -505,7 +517,7 @@ typeCheckUpgrade _s _f (UpgradeData_ s'_ a'_ b'_ f_ g_) =
       Refl <- eqT @a @a'
       Refl <- eqT @b @b'
       Refl <- eqT @s @s'
-      f <- typeCheck f_
+      f <- typeCheck f_ s' a' b'
       g <- typeCheck g_ TUnit s' s'
       return (UpgradeData f g)
 ```
