@@ -126,19 +126,10 @@ In this post I'd like to focus on upgrading stateful systems, like
 non-distributed databases and stateful services like FTP or filesystems.
 
 Stateful systems arguebly have the worst upgrade path of the ones listed above,
-making it more interesting to work on.
-
-Some people might say that upgrades are a solved problem in the client-only,
-stateless and distributed stateful settings
-
-Although I believe that the techniques can be used to simplify the other
-system's upgrades.
-
-potentially enable possibilities (debugging / live coding, etc)
-
-I feel like people tend to avoid these kind of systems, because the upgrade
-paths of the other kinds of systems are easier.
-    + ORM mismatch also has its problems, Thompson
+making them more interesting to work on. That said I hope that the techniques
+can be used to simplify upgrades in the other kinds of systems too, and
+potentially enabling other possibilities like better debugging experience and
+live coding.
 
 ### Programs and their upgrades
 
@@ -704,7 +695,9 @@ Item "Left 0"              -- The value is back to 0.
 
 ## Discussion and future work
 
-XXX: revisit list from motivation...
+While there's still a lot to do in order to get proper support for upgrades of
+stateful systems, I hope that I've managed to provide a glimpse of a possible
+way of going about doing it.
 
 Here are a bunch of things I've thought of but not done yet:
 
@@ -715,46 +708,54 @@ Here are a bunch of things I've thought of but not done yet:
    `String` and made deserialisation and serialisation part of the upgrade, thus
    allowing for changes in the inputs and outputs). I think that the state type
    is different though, and we should be able to change that during an upgrade;
-2. To support backwards compatibility we'd need to deploy the new state machine
-   next to the old one and choose which to use as part of parsing the client
-   request (i.e. if client is on an old version redirect it to the old state
-   machine). We'd probably want to also tell the old clients that they should
-   upgrade and in some subsequent upgrade we'd want to remove support for the
-   old API;
-XXX: the above doesn't work, the states of the two state machines will be disjoint...
+2. To support backwards compatibility we'd need to extend the notion of upgrade
+   with an input upgrade function (upgrading old inputs to new inputs) and an
+   output downgrade function (taking new outputs to old outputs), like we
+   discussed in the introduction;
+3. For forward compatibility we'd need a way for an old server to ignore the new
+   stuff that was added to an input. One way to achieve this could be to define
+   a function on types, which annotates the input with extra constructors or
+   parameters to exisiting constructors, etc, then the server could ignore these
+   extra annotations. We'd also need default values for anything that is added
+   to the outputs, so that the servers old output can be upgraded to the new
+   output that the new client expects.
 
-3. We've seen upgrades of state machines running on top of pipelines, but what
+   Alternatively clients can be made to support multiple versions and establish
+   which version to use in the initial handshake with the server, this is
+   arguebly not as satisfying of a solution though;
+4. We've seen upgrades of state machines running on top of pipelines, but what
    if we wanted to change the pipelines themselves? This seems tricker. Perhaps
    can start by thinking about what kind of changes one would like to allow,
    e.g. prepending or appending something to a pipeline seems easier than
    changing some part in the middle?
-4. The state machine are represented by first-order datatypes, that get
+5. The state machine are represented by first-order datatypes, that get
    typechecked and then interpreted. What would upgrades look like if we wanted
    to state machines to be compiled rather than interpreted? For some prior work
    in Haskell see the repos
    [`haskell-hot-swap`](https://github.com/nmattia/haskell-hot-swap) and
    [`ghc-hotswap`](https://github.com/fbsamples/ghc-hotswap/);
-5. Writing state machines and pipelines using combinators is not fun, can we
+6. Writing state machines and pipelines using combinators is not fun, can we
    have something like Haskell's arrow syntax at the very least? C.f. Conal
    Elliott's [*Compiling to
    categories*](http://conal.net/papers/compiling-to-categories/) and Oleg
    Grenrus'
    [*Overloaded.Categories*](https://hackage.haskell.org/package/overloaded-0.3.1/docs/Overloaded-Categories.html);
-6. One advantage with the combinators is that they don't contain variables, so
+7. One advantage with the combinators is that they don't contain variables, so
    it should be easier to do something like Unison does with content-addressed
    hashes?
-7. On the pipeline level we might want to support multiple sources
+8. On the pipeline level we might want to support multiple sources
    (`Alternative` instance?), multiple sinks (perhaps via something like `Tee ::
    P a b -> Sink a () -> P a b`?), fanout and sharding as well as making
    everything efficient (as I've written about
    [earlier](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html));
-8. Finally we also need to figure out how to we build something more
-   complicated, like a HTTP-based API, on top of the TCP stuff.
+9. Finally we also need to figure out how to we build something more
+   complicated, like a HTTP-based API, on top of the TCP stuff. Scott Wlaschin's
+   ["pipeline-oriented
+   programming"](https://www.youtube.com/watch?v=ipceTuJlw-M) approach can be
+   useful here.
 
-  XXX: (["pipeline-oriented
-    programming"](https://youtu.be/ipceTuJlw-M?t=493))
-
-If any of the above sounds interesting, please do feel free to get involved!
+If you feel that I'm missing something, or if any of the above sounds
+interesting to work on, please do feel free to get in touch!
 
 ## Running the code
 
