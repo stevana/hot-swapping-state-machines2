@@ -153,7 +153,7 @@ Turing machines, but that would be too clumsy and too low-level.
 
 A happy middle ground, which is easy to implement in any programming language
 while at the same time expressive enough to express any algorithm at a desired
-level of abstraction[^1], is the humble state machine.
+level of abstraction, is the humble state machine[^1].
 
 There are different ways to define state machines, we'll go for a defintion
 which is a simple function from some input and a state to a pair of some output
@@ -241,16 +241,16 @@ the state machines.
 
 A typical TCP-based service can then be composed of a pipeline that:
 
-  1. accepts new connections/sockets from a client;
-  2. waits for some of the accepted sockets to be readable (this requries some
+  1. Accepts new connections/sockets from a client;
+  2. Waits for some of the accepted sockets to be readable (this requries some
      `select/poll`-like constructs);
-  3. recv the bytes of a request;
-  4. deserialise the request bytes into an input;
-  5. process the input using the a state machine to produce an output
+  3. `recv` the bytes of a request;
+  4. Deserialise the request bytes into an input;
+  5. Process the input using the a state machine to produce an output
      (potentially reading and writing to disk);
-  6. serialise the output into a response in bytes;
-  7. wait for the socket to be writeable;
-  8. send the response bytes back to the client and close the socket.
+  6. Serialise the output into a response in bytes;
+  7. Wait for the socket to be writeable;
+  8. Send the response bytes back to the client and close the socket.
 
 Each of these stages could be a state machine which runs in parallel with all
 the other stages, but we can also imagine grouping stages together into bigger
@@ -274,43 +274,39 @@ CPU/core while odd numbered requests go to the other. That way we effectively
 double the throughput, without breaking determinism (as opposed to when worker
 pools are used).
 
-Let me just leave you with one final image: I like to think of state machines on
-top of pipelines as a limited form of actors or Erlang processes (or
-`gen_server`s more precisely) that cannot send messages to which other process
-they like (graph-like structure), but rather only downstream (DAG-like
-structure).
-
-This restriction makes it easier to make everything deterministic, which in turn
-makes it easier to (simulation) test.
-
-It should also make it possible for the implementation to be more efficient. For
-example, if we want to have a pipeline that takes the output of one state
-machine and broadcasts it to two other state machines (on the same computer)
-then in Erlang the output would be copied to the two machines downstream,
-whereas with pipelines we can do it without copying.
+Let me just leave you with one final image. I like to think of state machines on
+top of pipelines as a limited form of actors or Erlang processes (`gen_server`s
+more precisely) that cannot send messages to which other process they like
+(graph-like structure), but rather only downstream (DAG-like structure)[^3].
 
 ## Implementation
 
-* I hope that the abstract theory helps explain where my ideas are coming from,
-  now let's make things concrete with some code
+I hope that I've managed to convey what I'd like to do, why and where my
+inspiration is coming from.
 
-* Linear pipelines, to keep things simple
+Next I'd like to make things more concrete with some code. But first I'd like to
+apologise for my choice of using Haskell. I know it's a language that not that
+many people are comfortable with, but its advanced type system (GADTs in
+particular) helps me express things more cleanly. If anything isn't clear, feel
+free to ask, I'm happy to try to explain things in simpler terms. Also if anyone
+knows how to express this without GADTs, while retaining type safety, then
+please let me know. The code doesn't add anything new to our previous
+discussion, merely validates that at least some of it can be implemented, so
+even if you can't follow everything you won't be missing out on anything
+important.
 
+A few notes on the implementation:
 
-* Each stage of the pipeline runs in parallel with all other stages, thus giving
-  us pipelining parallelism a la assembly lines
-
-* The transformation at each stage is done via a state machine (transducer)
-
-* Both pipelines and state machines can be seralised and sent over the wire,
-  this enables remote deployments and upgrades
-
+* To keep things simple we'll only implement linear pipelines. Each stage of the
+  pipeline runs in parallel with all other stages, thus giving us pipelining
+  parallelism à la assembly lines;
+* The transformation at each stage is done via a state machine. The syntax of
+  state machines needs to be easily serialisable, so that we can send upgrades
+  over the wire;
 * The remote end will need to deserialise and typecheck the receiving code in
-  order to assure that it's compatible with the already deployed code
+  order to assure that it's compatible with the already deployed code.
 
-* Haskell, advanced type system (GADTs) help me think and express things more
-  cleanly, if anything isn't clear let me know, I'm happy to try to explain
-  things in simpler terms
+In the rest of this section we'll try to fleshing out details of the above.
 
 ### State machines
 
@@ -804,19 +800,36 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
   [here](https://stevana.github.io/working_with_binary_data.html) (2023).
 
 
-[^1]: See Yuri Gurevich's abstract state machines and their generalisation of
-    the Church-Turing thesis.
+[^1]: I used to argue that state machines should be used because they are easy
+    to reason about. Over the years I've found people argue for state machines
+    more eloquently and convincingly than I ever could. So rather than me trying
+    to convince you, I'll refer to them.
 
-(Abstract) state machines have been shown by be able to capture any algorithm at
-the right level of abstraction,
+    Joe Armstrong's PhD
+    [thesis](http://kth.diva-portal.org/smash/record.jsf?pid=diva2%3A9492&dswid=-4551)
+    (2003), Joe makes the point that big systems can be built in Erlang/OTP
+    using a handful of library constructs (behaviours). The most commonly used
+    of these building blocks is `gen_server`, which is a state machine. I've
+    written a high-level summary of the ideas over
+    [here](https://stevana.github.io/erlangs_not_about_lightweight_processes_and_message_passing.html),
+    although I recommend reading his thesis and forming your own conclusions.
 
-Lamport also argues that state machines should be used in [Computation and State
-Machines](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+    Leslie Lamport is another proponent of state machines. His TLA+ is basically
+    a language for describing state machines. See his article [*Computation and
+    State
+    Machines*](https://www.microsoft.com/en-us/research/publication/computation-state-machines/)
+    (2008) for an introduction. Fault tolerance in distributed systems is often
+    realised by means of replicated state machines, which Leslie helped develop
+    back in the 80s.
 
-In Erlang the most fundamental building block (behaviour) is gen_server which
-also is a state machine.
-
-* event/command sourcing, thompson
+    State machines might seem like low-level clumsy way of programming, but Yuri
+    Gurevich has
+    [shown](https://www.microsoft.com/en-us/research/publication/103-evolving-algebras-1993-lipari-guide/)
+    that abstract state machines (state machines where state can be any
+    first-order structure) can capture any algorithm at any level of
+    abstraction. This result is a generalisation of the Church-Turing thesis
+    from computable functions on natural numbers to arbitrary sequential
+    algrithms.
 
 [^2]: Many years ago I had the pleasure to study interaction structures (aka
     index containers aka polynomial functors). One of many possible way to view
@@ -835,3 +848,17 @@ also is a state machine.
     at least intuitively has some connection with upgrades.
 
     I suppose that there are more useful ideas to steal from there.
+
+[^3]: This restriction makes it easier to make everything deterministic, which
+    in turn makes it easier to (simulation) test. I touch upon this in an
+    earlier
+    [post](https://stevana.github.io/erlangs_not_about_lightweight_processes_and_message_passing.html)
+    towards the end. I hope to expand upon this in a separate post at some point
+    in the future.
+
+    It also make it possible for the implementation to be more efficient. For
+    example, if we want to have a pipeline that takes the output of one state
+    machine and broadcasts it to two other state machines (on the same computer)
+    then in Erlang the output would be copied to the two state machines
+    downstream, whereas with pipelines we can do it [without
+    copying](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html).
