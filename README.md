@@ -30,7 +30,7 @@ which can be used to perform up- and downgrades. Furthermore, these up- and
 downgrades can hot swap the running code resulting in zero-downtime and no
 interruption of the service of connected clients.
 
-If you haven't seen Erlang's hotswapping feature before, then you might want to
+If you haven't seen Erlang's hot swapping feature before, then you might want to
 have a look at the classic [Erlang the
 movie](https://www.youtube.com/watch?v=xrIjfIjssLE), which contains a
 telecommunications example of this. If you prefer reading over watching, then
@@ -39,7 +39,7 @@ I've written an earlier
 which starts off by explaining a REPL session which performs an upgrade (my
 example isn't nearly as cool as in the movie though).
 
-What is it that Erlang's releases and hotswapping facilities do? Can we steal
+What is it that Erlang's releases and hot swapping facilities do? Can we steal
 those ideas and build upon them? These are the main questions that motivated me
 in writing this post.
 
@@ -49,7 +49,7 @@ would good support for upgrades look like?
 * Zero-downtime: seamless, don't interrupt existing client connections or
   sessions;
 * If there's any state then migrate it in a type-safe way;
-* Backwards and forwards compatbility: old clients should be able to talk to
+* Backwards and forwards compatibility: old clients should be able to talk to
   newer servers, and newer clients should be able to talk to old servers;
 * Atomicity: upgrades either succeed, or fail and rollback any changes;
 * Downgrades: even if an upgrade succeeds we might want to rollback to an
@@ -72,7 +72,7 @@ There's different kinds of software systems one might want to upgrade.
   1. Client-only, e.g. a compiler, editor, or some command line utility which
      runs locally on your computer and doesn't interact with any server.
      Downtime is typically not a problem, and the state of the program is
-     typically saved to disk. The operating system's package mangager typically
+     typically saved to disk. The operating system's package manager typically
      takes care of the upgrades, with minimal user involvement. However there
      are situations where one might like to perform an upgrade without first
      terminating the old version of a client-only application, e.g. the
@@ -84,7 +84,7 @@ There's different kinds of software systems one might want to upgrade.
      [bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/);
   2. Client-server applications where the target of the upgrade is a *stateless*
      component of the server, e.g. a front-end or a REST API. The stateless
-     components typically retrive the state they need to service a request from
+     components typically retrieve the state they need to service a request from
      a stateful component, e.g. a database, but they don't maintain any state of
      their own, which makes stateless components easier to upgrade. A common
      strategy is to stick a load balancer in-front of the stateless
@@ -110,7 +110,7 @@ There's different kinds of software systems one might want to upgrade.
      previous commands in that user sessions, and this state is transient. If
      you think FTP is a silly protocol (it's), then consider the similarly
      stateful POSIX filesystem API, with its file handles that can be opened,
-     read, writen, and closed;
+     read, written, and closed;
   4. Distributed stateful systems, e.g. a distributed key-value database. This
      is similar to the above, but the replication of data is performed all the
      time rather than only at the moment an upgrade is performed. The
@@ -125,7 +125,7 @@ There's different kinds of software systems one might want to upgrade.
 In this post I'd like to focus on upgrading stateful systems, like
 non-distributed databases and stateful services like FTP or filesystems.
 
-Stateful systems arguebly have the worst upgrade path of the ones listed above,
+Stateful systems arguably have the worst upgrade path of the ones listed above,
 making them more interesting to work on. That said I hope that the techniques
 can be used to simplify upgrades in the other kinds of systems too, and
 potentially enabling other possibilities like better debugging experience and
@@ -139,14 +139,14 @@ attention to how we can represent programs and their upgrades.
 We could choose to use the syntax of a specific programming language to
 represent programs, but programming languages tend to be too big and complicated.
 
-We could be general and represent programs as λ-calculus terms or equivantly
+We could be general and represent programs as λ-calculus terms or equivalently
 Turing machines, but that would be too clumsy and too low-level.
 
 A happy middle ground, which is easy to implement in any programming language
 while at the same time expressive enough to express any algorithm at a desired
 level of abstraction, is the humble state machine[^1].
 
-There are different ways to define state machines, we'll go for a defintion
+There are different ways to define state machines, we'll go for a definition
 which is a simple function from some input and a state to a pair of some output
 and a new state:
 
@@ -161,7 +161,7 @@ To make things concrete, let's consider an example state machine of a counter.
 One way to define a such counter is to `{ReadCount, IncrCount}` as input,
 the state can be an integer and the output to be a tagged union where in the
 read case we return an integer and in the increment case we return an
-acknowledgement (unit or void type). Given these types, the state machine
+acknowledgment (unit or void type). Given these types, the state machine
 function of the counter can be defined as follows:
 
 ```python
@@ -190,7 +190,7 @@ I don't know if the above list complete, but it's a start.
 If we go back to the list of criteria for good upgrade support, we can see how
 some of the items there are more tangible now.
 
-For example, typed state migations means that if we change the state type from
+For example, typed state migrations means that if we change the state type from
 `state` to `state'` then when we migrate to old to the new state using a
 function `state -> state'`.
 
@@ -233,14 +233,14 @@ the state machines.
 A typical TCP-based service can then be composed of a pipeline that:
 
   1. Accepts new connections/sockets from a client;
-  2. Waits for some of the accepted sockets to be readable (this requries some
+  2. Waits for some of the accepted sockets to be readable (this requires some
      `select/poll`-like constructs);
   3. `recv` the bytes of a request;
   4. Deserialise the request bytes into an input;
   5. Process the input using the a state machine to produce an output
      (potentially reading and writing to disk);
   6. Serialise the output into a response in bytes;
-  7. Wait for the socket to be writeable;
+  7. Wait for the socket to be writable;
   8. Send the response bytes back to the client and close the socket.
 
 Each of these stages could be a state machine which runs in parallel with all
@@ -249,7 +249,7 @@ state machines, or even making some of this part of the pipeline infrastructure
 or runtime system.
 
 If stage 5 needs to read and write to the disk, then it can be broken up in
-three stages: read from disk, run the state machine, write to disk (possibily in
+three stages: read from disk, run the state machine, write to disk (possibly in
 batched fashion).
 
 That way the main application logic (the state machine that transforms inputs
@@ -276,7 +276,7 @@ I hope that I've managed to convey what I'd like to do, why and where my
 inspiration is coming from.
 
 Next I'd like to make things more concrete with some code. But first I'd like to
-apologise for my choice of using Haskell. I know it's a language that not that
+apologies for my choice of using Haskell. I know it's a language that not that
 many people are comfortable with, but its advanced type system (GADTs in
 particular) helps me express things more cleanly. If anything isn't clear, feel
 free to ask, I'm happy to try to explain things in simpler terms. Also if anyone
@@ -365,7 +365,7 @@ in a bit.
 
 ### Semantics
 
-We can intepret our typed state machines in terms of the `State` monad as
+We can interpret our typed state machines in terms of the `State` monad as
 follows.
 
 ```haskell
@@ -585,7 +585,7 @@ was done above in `typeCheckUpgrade`.
 Almost there. When we deploy a pipeline `P a b` we need to provide a `Queue (Msg
 a)` and get a `Queue (Msg b)`, what are we supposed to do with those queues? We
 could manually feed them with items, but for convenience it's nice to have some
-basic reusable adaptors that we can connect these "garden hoses" to.
+basic reusable adapters that we can connect these "garden hoses" to.
 
 We call something that provides an input queue a `Source` and something that
 consumes an output queue a `Sink`. Useful sources and sinks include
@@ -715,16 +715,16 @@ Here are a bunch of things I've thought of but not done yet:
 3. For forward compatibility we'd need a way for an old server to ignore the new
    stuff that was added to an input. One way to achieve this could be to define
    a function on types, which annotates the input with extra constructors or
-   parameters to exisiting constructors, etc, then the server could ignore these
+   parameters to existing constructors, etc, then the server could ignore these
    extra annotations. We'd also need default values for anything that is added
    to the outputs, so that the servers old output can be upgraded to the new
    output that the new client expects.
 
    Alternatively clients can be made to support multiple versions and establish
    which version to use in the initial handshake with the server, this is
-   arguebly not as satisfying of a solution though;
+   arguably not as satisfying of a solution though;
 4. We've seen upgrades of state machines running on top of pipelines, but what
-   if we wanted to change the pipelines themselves? This seems tricker. Perhaps
+   if we wanted to change the pipelines themselves? This seems trickier. Perhaps
    can start by thinking about what kind of changes one would like to allow,
    e.g. prepending or appending something to a pipeline seems easier than
    changing some part in the middle?
@@ -830,7 +830,7 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
     first-order structure) can capture any algorithm at any level of
     abstraction. This result is a generalisation of the Church-Turing thesis
     from computable functions on natural numbers to arbitrary sequential
-    algrithms.
+    algorithms.
 
 [^2]: Many years ago I had the pleasure to study interaction structures (aka
     index containers aka polynomial functors). One of many possible way to view
