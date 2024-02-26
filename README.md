@@ -225,7 +225,7 @@ A simple way adding parallelism is make it possible to construct pipelines of
 state machines, where the state machines run in parallel. Picture the state
 machines as processing stages on a conveyor belt.
 
-![](https://raw.githubusercontent.com/stevana/arrow-loop-state-machines/main/data/bottling_factory.png)
+![](https://raw.githubusercontent.com/stevana/hot-swapping-state-machines2/main/data/bottling_factory.png)
 
 The conveyor belt in our case, i.e. our pipeline, will be queues which connect
 the state machines.
@@ -763,8 +763,8 @@ The easiest way to get the code running is probably using the [Nix package
 manager](https://nixos.org/download).
 
 ```bash
-git clone https://github.com/stevana/arrow-loop-state-machines.git
-cd arrow-loop-state-machines
+git clone https://github.com/stevana/hot-swapping-state-machines2.git
+cd hot-swapping-state-machines2
 nix-shell
 cabal repl
 ```

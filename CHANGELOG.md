@@ -1,4 +1,4 @@
-# Revision history for arrow-loop-state-machines
+# Revision history for hot-swapping-state-machines2
 
 ## 0.0.0 -- YYYY-mm-dd
 
