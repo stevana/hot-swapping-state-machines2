@@ -232,7 +232,7 @@ A typical TCP-based service can then be composed of a pipeline that:
 
   1. Accepts new connections/sockets from a client;
   2. Waits for some of the accepted sockets to be readable (this requires some
-     `select/poll`-like constructs);
+     `select/poll/io_uring`-like constructs);
   3. `recv` the bytes of a request;
   4. Deserialise the request bytes into an input;
   5. Process the input using the a state machine to produce an output
@@ -244,7 +244,8 @@ A typical TCP-based service can then be composed of a pipeline that:
 Each of these stages could be a state machine which runs in parallel with all
 the other stages. Structuring services in this pipeline fashion was
 [advocated](https://www.youtube.com/watch?v=U3eo49nVxcA&t=1949s) by the late Jim
-Gray and more recently Martin Thompson et al have been giving
+Gray and more recently Martin Thompson et al have
+[been](https://www.youtube.com/watch?v=qDhTjE0XmkE) giving
 [talks](https://www.youtube.com/watch?v=_KvFapRkR9I) using a similar approach.
 If a stage is slow, we can shard (or partition, using Jim's terminology) it by
 dedicating another CPU/core to that stage and have even numbered requests to one
