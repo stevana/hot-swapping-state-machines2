@@ -239,7 +239,7 @@ A typical TCP-based service can then be composed of a pipeline that:
      (potentially reading and writing to disk);
   6. Serialise the output into a response in bytes;
   7. Wait for the socket to be writable;
-  8. Send the response bytes back to the client and close the socket.
+  8. `send` the response bytes back to the client and close the socket.
 
 Each of these stages could be a state machine which runs in parallel with all
 the other stages. Structuring services in this pipeline fashion was
