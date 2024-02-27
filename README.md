@@ -78,7 +78,7 @@ There's different kinds of software systems one might want to upgrade.
      terminating the old version of a client-only application, e.g. the
      fix-and-continue debugging
      [workflow](https://lispcookbook.github.io/cl-cookbook/debugging.html#resume-a-program-execution-from-anywhere-in-the-stack)
-     from Lisp and Smalltalk, [live-coding
+     from Lisp and Smalltalk, [live coding
      music](https://en.wikipedia.org/wiki/TidalCycles), or when working with
      large data sets, e.g. in
      [bioinformatics](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1386713/);
@@ -101,7 +101,8 @@ There's different kinds of software systems one might want to upgrade.
      logically replicating all new requests from the old to the new database
      while also restoring the snapshot to the new database, once the new
      database has caught up, we can switch over and tear down the old database.
-     Depending on the volume and traffic this can still be a difficult operation.
+     Depending on the volume of the database and the rate of new traffic this
+     can still be a difficult operation.
 
      A service like FTP, where once the user is connected they can "move around"
      by e.g. changing the working directory and list the contents of the current
@@ -137,18 +138,15 @@ Having defined what kind of systems we'd like to upgrade, let's turn our
 attention to how we can represent programs and their upgrades.
 
 We could choose to use the syntax of a specific programming language to
-represent programs, but programming languages tend to be too big and complicated.
-
-We could be general and represent programs as λ-calculus terms or equivalently
-Turing machines, but that would be too clumsy and too low-level.
+represent programs, but programming languages tend to be too big and
+complicated. Or, we could be general and represent programs as λ-calculus terms
+or equivalently Turing machines, but that would be too clumsy and too low-level.
 
 A happy middle ground, which is easy to implement in any programming language
 while at the same time expressive enough to express any algorithm at a desired
-level of abstraction, is the humble state machine[^1].
-
-There are different ways to define state machines, we'll go for a definition
-which is a simple function from some input and a state to a pair of some output
-and a new state:
+level of abstraction, is the humble state machine[^1]. There are different ways
+to define state machines, we'll go for a definition which is a simple function
+from some input and a state to a pair of some output and a new state:
 
 ```
   input -> state -> (state, output)
@@ -157,12 +155,13 @@ and a new state:
 where inputs, states and outputs are algebraic datatypes (records/structs and
 tagged unions).
 
-To make things concrete, let's consider an example state machine of a counter.
-One way to define a such counter is to `{ReadCount, IncrCount}` as input,
-the state can be an integer and the output to be a tagged union where in the
-read case we return an integer and in the increment case we return an
-acknowledgment (unit or void type). Given these types, the state machine
-function of the counter can be defined as follows:
+To make things concrete, let's consider an example where we represent a counter
+as a state machine. One way to define such a state machine is to use the enum
+`{ReadCount, IncrCount}` as input, set the state to be an integer and the output
+to be a tagged union where in the read case we return an integer and in the
+increment case we return an acknowledgment (unit or void type). Given these
+types, the state machine function of the counter can be defined as follows (in
+Python):
 
 ```python
 def counter(input: Input, state: int) -> (int, int | None):
@@ -192,7 +191,7 @@ some of the items there are more tangible now.
 
 For example, typed state migrations means that if we change the state type from
 `state` to `state'` then when we migrate to old to the new state using a
-function `state -> state'`.
+function of type `state -> state'`.
 
 Similarly, what it means to support backwards compatibility is more clear now.
 Imagine we upgrade from a server state machine:
@@ -219,11 +218,10 @@ more concrete way.
 
 One last thing with regard to how to represent programs. Our state machines run
 entirely sequentially, which is a problem if we want to implement servers that
-can handle more than one client at the time.
-
-A simple way adding parallelism is make it possible to construct pipelines of
-state machines, where the state machines run in parallel. Picture the state
-machines as processing stages on a conveyor belt.
+can handle more than one client at the time. A simple way adding parallelism is
+make it possible to construct pipelines of state machines, where the state
+machines run in parallel. Picture the state machines as processing stages on a
+conveyor belt.
 
 ![](https://raw.githubusercontent.com/stevana/hot-swapping-state-machines2/main/data/bottling_factory.png)
 
@@ -244,26 +242,14 @@ A typical TCP-based service can then be composed of a pipeline that:
   8. Send the response bytes back to the client and close the socket.
 
 Each of these stages could be a state machine which runs in parallel with all
-the other stages, but we can also imagine grouping stages together into bigger
-state machines, or even making some of this part of the pipeline infrastructure
-or runtime system.
-
-If stage 5 needs to read and write to the disk, then it can be broken up in
-three stages: read from disk, run the state machine, write to disk (possibly in
-batched fashion).
-
-That way the main application logic (the state machine that transforms inputs
-into outputs) can be run a its own CPU/core.
-
-Structuring services in this pipeline fashion was advocated by the late Jim Gray
-and more recently Martin Thompson et al have been giving talks using a similar
-approach.
-
+the other stages. Structuring services in this pipeline fashion was
+[advocated](https://www.youtube.com/watch?v=U3eo49nVxcA&t=1949s) by the late Jim
+Gray and more recently Martin Thompson et al have been giving
+[talks](https://www.youtube.com/watch?v=_KvFapRkR9I) using a similar approach.
 If a stage is slow, we can shard (or partition, using Jim's terminology) it by
 dedicating another CPU/core to that stage and have even numbered requests to one
 CPU/core while odd numbered requests go to the other. That way we effectively
-double the throughput, without breaking determinism (as opposed to when worker
-pools are used).
+double the throughput, without breaking determinism.
 
 Let me just leave you with one final image. I like to think of state machines on
 top of pipelines as a limited form of actors or Erlang processes (`gen_server`s
@@ -302,7 +288,7 @@ In the rest of this section we'll try to fleshing out details of the above.
 ### State machines
 
 Typed state machines are represented using a datatyped parametrised by the
-state, `s`, and indexed by its input type, `a`, and output type `b`.
+state, `s`, and indexed by its input type, `a`, and output type `b`[^4].
 
 ```haskell
 data T s a b where
@@ -329,11 +315,6 @@ data T s a b where
 (>>>) :: T s a b -> T s b c -> T s a c
 f >>> g = g `Compose` f
 ```
-
-(The initiated might recognise that this is an instance of `Category` and
-partially an instance of `Cocartesian`, plus some extras. In a "real"
-implementation we would want this datatype to be an instance of `Cocartesian`
-instance as well as `Cartesian`.)
 
 ### Example
 
@@ -863,3 +844,11 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
     then in Erlang the output would be copied to the two state machines
     downstream, whereas with pipelines we can do it [without
     copying](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html).
+
+[^4]: People familiar with Haskell's ecosystem might recognise that this is an
+    instance of
+    [`Category`](https://hackage.haskell.org/package/base-4.19.1.0/docs/Control-Category.html)
+    and partially an instance of
+    [`Cocartesian`](https://github.com/stevana/hot-swapping-state-machines2/blob/main/src/Classes.hs#L13),
+    plus some extras. In a "real" implementation we would want this datatype to
+    be an instance of `Cocartesian` instance as well as `Cartesian`.
