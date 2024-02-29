@@ -120,7 +120,7 @@ There's different kinds of software systems one might want to upgrade.
      tolerate and repair some amount of faulty replicas, which allows for
      rolling upgrades where we replace one of the server components at the time;
   5. There's also [local-first](https://www.inkandswitch.com/local-first/)
-     systems, which are different than all above. I've not had a chance to think
+     systems, which are different to all the above. I've not had a chance to think
      about upgrades in that context, so I won't talk about them any further.
 
 In this post I'd like to focus on upgrading stateful systems, like
@@ -288,7 +288,7 @@ In the rest of this section we'll try to fleshing out details of the above.
 
 ### State machines
 
-Typed state machines are represented using a datatyped parametrised by the
+Typed state machines are represented using a datatype parametrised by the
 state, `s`, and indexed by its input type, `a`, and output type `b`[^4].
 
 ```haskell
@@ -319,9 +319,7 @@ f >>> g = g `Compose` f
 
 ### Example
 
-To keep things concrete let's have an example. Here's how we can represent a
-counter with two operations: read the current value of the counter and increment
-the counter by one.
+To keep things concrete let's reimplement the counter example from above.
 
 ```haskell
 type InputV1  = Either () ()
@@ -377,6 +375,9 @@ Using the above interpreter we can run our example from before.
 ("Left 1",1)
 ```
 
+These runs only step the counter by one input at the time, things get more
+interesting when state machines get streams of inputs via pipelines.
+
 ### Pipelines
 
 Pipelines are represented by a type similar to that for typed state machines,
@@ -394,7 +395,7 @@ data P a b where
 type Name = String
 ```
 Notice how the state type of the state machines is existentially quantified,
-meaning each state machine can have it's own state.
+meaning each state machine can have its own state.
 
 ### Deployment
 
@@ -403,7 +404,13 @@ meaning that all state machines run in parallel, and they will be connected via
 queues.
 
 Given a pipeline `P a b` and an input `Queue (Msg a)` we get an output `Queue
-(Msg b)`, where `Msg` is defined as follows.
+(Msg b)`:
+
+```haskell
+deploy :: forall a b. (Typeable a, Typeable b)
+       => P a b -> Queue (Msg a) -> IO (Queue (Msg b))
+```
+where `Msg` is defined as follows.
 
 ```haskell
 data Msg a
@@ -412,12 +419,17 @@ data Msg a
   ...
 ```
 
-This little wrapper allows us to perform upgrades of state machines, assuming
-they are compatible with the running state machine.
+Think of `Msg a` as small wrapper around `a` which might contain a client socket
+(so that we know where to send the reply), or an upgrade. Upgrades are targeting
+a specific state machine in our pipeline, that's what the `Name` parameter is
+for, and they also carry an untyped `UpgradeData_` payload which will come back
+to shortly.
+
+Given the above we can define deployment of pipelines as follows (I'll explain
+each case below the code).
+
 
 ```haskell
-deploy :: forall a b. (Typeable a, Typeable b)
-       => P a b -> Queue (Msg a) -> IO (Queue (Msg b))
 deploy IdP             q = return q
 deploy (f :>>> g)      q = deploy g =<< deploy f q
 deploy (SM name s0 f0) q = do
@@ -445,6 +457,27 @@ deploy (SM name s0 f0) q = do
   _pid <- forkIO (go s0 f0)
   return q'
 ```
+
+The identity pipeline simply returns the input queue. We deploy compositions of
+pipelines by deploying the components and connecting the queues. Deploying state
+machines is the interesting part.
+
+When we deploy state machines, we first create a new queue which will hold the
+outputs, we then fork a new thread which reads from the input queue and writes
+to this new output queue, and finally we return the output queue. When reading
+from the input queue there're two cases:
+
+  1. We can either get a regular `Item` in which case we step our state machine
+     using the `runT` function to obtain an output and a new state, we write the
+     output to the output queue and continue processing with the new state;
+  2. Or, if the `Msg` is an `Upgrade` we first check if the upgrade is targeting
+     this state machine by checking if the names match, if not we simply pass it
+     further downstream. If the names to match then we try to typecheck the
+     untyped `UpgradeData_`. If the typechecking succeeds, we'll get a new state
+     machine and a state migration function, which allows us to migrate the
+     current state and continue processing with the new state machine.
+
+Next let's have a look at how upgrades are represented and typechecked.
 
 ### Upgrades
 
