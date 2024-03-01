@@ -710,11 +710,17 @@ Item "Left 0"              -- The value is back to 0.
 
 ## Discussion and future work
 
+Wouldn't it be neat if the programming language environment (compiler/REPL?)
+could keep track of what's deployed where and only allow us to upgrade it
+without downtime and without breaking forwards or backwards compatibility? (Or
+at least give us a stern warning and let us proceed in cases we really wanted to
+break things.)
+
 While there's still a lot to do in order to get proper support for upgrades of
 stateful systems, I hope that I've managed to provide a glimpse of a possible
-way of going about doing it.
+way of going about doing it, at least if one content with writing state machines.
 
-Here are a bunch of things I've thought of but not done yet:
+Here are a bunch of things I've thought of, but not done yet:
 
 1. Notice how the type of `counterV1` and `counterV2` is the same. I think the
    input and output types perhaps need to stay the same, otherwise we wouldn't
@@ -816,17 +822,24 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
   [here](https://stevana.github.io/working_with_binary_data.html) (2023).
 
 
-[^1]: I used to argue that state machines should be used because they are easy
-    to reason about. Over the years I've found people argue for state machines
-    more eloquently and convincingly than I ever could. So rather than me trying
-    to convince you, I'll refer to them.
+[^1]: State machines might seem like low-level clumsy way of programming, but
+    Yuri Gurevich has
+    [shown](https://www.microsoft.com/en-us/research/publication/103-evolving-algebras-1993-lipari-guide/)
+    that abstract state machines (state machines where state can be any
+    first-order structure) can avoid the Turing tarpit and capture any algorithm
+    at any level of abstraction. This result is a generalisation of the
+    Church-Turing thesis from computable functions on natural numbers to
+    arbitrary sequential algorithms.
 
-    Joe Armstrong's PhD
+    In case you're not convinced by this theoretical argument, then here are a
+    couple of practical examples of state machine use from industry.
+
+    In Joe Armstrong's PhD
     [thesis](http://kth.diva-portal.org/smash/record.jsf?pid=diva2%3A9492&dswid=-4551)
-    (2003), Joe makes the point that big systems can be built in Erlang/OTP
-    using a handful of library constructs (behaviours). The most commonly used
-    of these building blocks is `gen_server`, which is a state machine. I've
-    written a high-level summary of the ideas over
+    (2003), Joe gives an example of a big Ericsson telecommunications system
+    built in Erlang/OTP using a handful of library constructs (behaviours). The
+    most commonly used of these building blocks is `gen_server`, which is a
+    state machine. I've written a high-level summary of the ideas over
     [here](https://stevana.github.io/erlangs_not_about_lightweight_processes_and_message_passing.html),
     although I recommend reading his thesis and forming your own conclusions.
 
@@ -838,14 +851,9 @@ replace `nix-shell` with `ghcup install ghc 9.8.1`.
     realised by means of replicated state machines, which Leslie helped develop
     back in the 80s.
 
-    State machines might seem like low-level clumsy way of programming, but Yuri
-    Gurevich has
-    [shown](https://www.microsoft.com/en-us/research/publication/103-evolving-algebras-1993-lipari-guide/)
-    that abstract state machines (state machines where state can be any
-    first-order structure) can capture any algorithm at any level of
-    abstraction. This result is a generalisation of the Church-Turing thesis
-    from computable functions on natural numbers to arbitrary sequential
-    algorithms.
+    Jean-Raymond Abrial's B-method (a successor to Z notation) is also centered
+    around state machines and has been used to verify the automatic Paris Métro
+    lines 14 and 1 and the Ariane 5 rocket.
 
 [^2]: Many years ago I had the pleasure to study interaction structures (aka
     index containers aka polynomial functors). One of many possible way to view
