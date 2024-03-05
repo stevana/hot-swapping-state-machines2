@@ -790,8 +790,6 @@ Item "Right (Right (Left 1))"   -- The value is 1.
 
 ## Discussion and future work
 
-XXX:
-
 If we look back at the list, from the introduction, of properties that we wanted
 from our upgrades, then I hope that I've managed to provide a glimpse of a
 possible way of achieving zero-downtime upgrades with type-safe state migrations
@@ -808,31 +806,22 @@ an
 [interface_description_language](https://en.wikipedia.org/wiki/Interface_description_language),
 such as Avro or Protobuf, but it could also be interesting see if we could add
 input and output migrations as part of upgrades (in addition to state
-migrations). Especially in conjuction with being able to derive them generically
+migrations). Especially in conjunction with being able to derive them generically
 and
 [automatically](https://www.manuelbaerenz.de/essence-of-live-coding/EssenceOfLiveCoding.pdf)
 from the schema change.
 
-There's also a bunch of other things that I thought of while working on this,
-which I don't have any good answers for yet.
+There's also a bunch of other
+[things](https://github.com/stevana/hot-swapping-state-machines2/blob/main/TODO.md)
+that I thought of while working on this, which I don't have any good answers for
+yet. If you feel that I'm missing something, or if any of these problems sound
+interesting to work on, please do feel free to get in
+[touch](https://stevana.github.io/about.html)!
 
-If you feel that I'm missing something, or if any of these problems sound
-interesting to work on, please do feel free to get in touch!
-
-Let me leave you with one closing though:
-
-Wouldn't it be neat if the programming language environment (compiler/REPL?)
-could keep track of what's deployed where and only allow us to upgrade it
-without downtime and without breaking forwards or backwards compatibility? (Or
-at least give us a stern warning and let us proceed in cases we really wanted to
-break things.)
-
-Another way to think of it is typechecking across versions of code, as opposed
-to merely typechecking a version of the code in isolation of the rest.
-
-In a world where software systems are expected to evolve over time, this seems
-like our programming languages should also be helping us with upgrades, don't
-you think?
+Let me leave you with one closing question: in a world where software systems
+are expected to evolve over time, wouldn't it be neat if we could typecheck our
+code *across versions*, as opposed to merely typechecking a version of the code
+in isolation from the next?
 
 
 [^1]: State machines might seem like low-level clumsy way of programming, but
