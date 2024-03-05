@@ -802,12 +802,11 @@ downgrade in case there's more than N errors within some time period, or
 something like that.
 
 I didn't talk about backwards and forwards compatibility. We could probably use
-an
-[interface_description_language](https://en.wikipedia.org/wiki/Interface_description_language),
-such as Avro or Protobuf, but it could also be interesting see if we could add
-input and output migrations as part of upgrades (in addition to state
-migrations). Especially in conjunction with being able to derive them generically
-and
+an [interface description
+language](https://en.wikipedia.org/wiki/Interface_description_language), such as
+Avro or Protobuf, but it could also be interesting see if we could add input and
+output migrations as part of upgrades (in addition to state migrations).
+Especially in conjunction with being able to derive them generically and
 [automatically](https://www.manuelbaerenz.de/essence-of-live-coding/EssenceOfLiveCoding.pdf)
 from the schema change.
 
@@ -818,10 +817,12 @@ yet. If you feel that I'm missing something, or if any of these problems sound
 interesting to work on, please do feel free to get in
 [touch](https://stevana.github.io/about.html)!
 
-Let me leave you with one closing question: in a world where software systems
-are expected to evolve over time, wouldn't it be neat if we could typecheck our
-code *across versions*, as opposed to merely typechecking a version of the code
-in isolation from the next?
+Let me close by trying to tie it back to Barbara Liskov's remark about the need
+for more complete programming languages. In a world where software systems are
+expected to evolve over time, wouldn't it be neat if programming languages
+provided some notion of upgrade and could typecheck our code *across versions*,
+as opposed to merely typechecking a version of the code in isolation from the
+next?
 
 
 [^1]: State machines might seem like low-level clumsy way of programming, but
