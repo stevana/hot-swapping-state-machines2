@@ -445,12 +445,13 @@ deploy (SM name s0 f0) q = do
                 writeQueue q' (Upgrade msock name' ud)
                 go s f
             | otherwise ->
-                case typeCheckUpgrade s f ud of
-                  Just (UpgradeData (f' :: T s a b) (g :: T () s s)) -> do
-                    let (s', ()) = runT g s ()
-                    go s' f'
-                  Nothing ->
-                    go s f
+                case typeCheckUpgrade f ud of
+                  Just (UpgradeData (f' :: T t' a b) (g :: T () s t')) -> do
+                    let (t', ()) = runT g s ()
+                    case cast t' of
+                      Just s' -> go s' f'
+                      Nothing -> go s f
+                  Nothing -> go s f
           ...
   _pid <- forkIO (go s0 f0)
   return q'
@@ -484,10 +485,10 @@ other end, so they need to be plain first-order data.
 
 This means we can't merely send over our typed state machine type `t :: T s a
 b`, or rather the receiver will have to reconstruct the type information. If
-this would strange, the perhaps easiest way to convince yourself is to imagine
+this sounds strange, the perhaps easiest way to convince yourself is to imagine
 you receive `show t` and now you want to reconstruct `t`. When you call `read
 (show t)` you need to annotate it with what type to read into, and that's the
-problem: at this point you don't have `T s a b`.
+problem: at this point you don't have the type annotation `T s a b`.
 
 So the plan around this is to introduce a plain first-order datatype for
 upgrades, which can easily be serialised and deserialised, and then use
@@ -590,9 +591,10 @@ data U
   | ShowU Ty_
 ```
 
-I'll spare you from the details, but the main ingredient is to use the
-`Data.Typeable` instances to check if the types match up, similarly to how it
-was done above in `typeCheckUpgrade`.
+I'll spare you from the
+[details](https://github.com/stevana/hot-swapping-state-machines2/blob/main/src/TypeCheck/StateMachine.hs),
+but the main ingredient is to use the `Data.Typeable` instances to check if the
+types match up, similarly to how it was done above in `typeCheckUpgrade`.
 
 ### Sources and sinks
 
