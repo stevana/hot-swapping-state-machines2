@@ -1,25 +1,18 @@
-1. Notice how the type of the inputs and outputs of our counters is always `String`.
-`counterV1` and `counterV2` is the same. I think the
-
-
-The counter does its own
-deserialisation and serialisation via `Read` and `Show`, we'll come back to why
-in a bit.
-
-XXX:
-
-   input and output types perhaps need to stay the same, otherwise we wouldn't
-   be able to perform the upgrade in the `deploy` function because the types of
-   the input and output queues cannot change (that's why we set them both to be
-   `String` and made deserialisation and serialisation part of the upgrade, thus
-   allowing for changes in the inputs and outputs). I think that the state type
-   is different though, and we should be able to change that during an upgrade;
-
-2. To support backwards compatibility we'd need to extend the notion of upgrade
-   with an input upgrade function (upgrading old inputs to new inputs) and an
-   output downgrade function (taking new outputs to old outputs), like we
+1. Notice how the type of the inputs and outputs of our counters is always
+   `String`, i.e. the counter does its own deserialisation and serialisation via
+   `Read` and `Show`. I don't quite see how we can implement `deploy` if we
+   didn't do the parsing as part of the state machine, because the types of
+   the input and output queues cannot change?
+2. Related to above and perhaps the solution is: what if we wanted to change the
+   pipelines themselves (as opposed to the state machines in them)? This seems
+   trickier. Perhaps can start by thinking about what kind of changes one would
+   like to allow, e.g. prepending or appending something to a pipeline seems
+   easier than changing some part in the middle?
+3. To natively support backwards compatibility we'd need to extend the notion of
+   upgrade with an input upgrade function (upgrading old inputs to new inputs)
+   and an output downgrade function (taking new outputs to old outputs), like we
    discussed in the introduction;
-3. For forward compatibility we'd need a way for an old server to ignore the new
+4. For forward compatibility we'd need a way for an old server to ignore the new
    stuff that was added to an input. One way to achieve this could be to define
    a function on types, which annotates the input with extra constructors or
    parameters to existing constructors, etc, then the server could ignore these
@@ -30,11 +23,6 @@ XXX:
    Alternatively clients can be made to support multiple versions and establish
    which version to use in the initial handshake with the server, this is
    arguably not as satisfying of a solution though;
-4. We've seen upgrades of state machines running on top of pipelines, but what
-   if we wanted to change the pipelines themselves? This seems trickier. Perhaps
-   can start by thinking about what kind of changes one would like to allow,
-   e.g. prepending or appending something to a pipeline seems easier than
-   changing some part in the middle?
 5. The state machine are represented by first-order datatypes, that get
    typechecked and then interpreted. What would upgrades look like if we wanted
    to state machines to be compiled rather than interpreted? For some prior work
