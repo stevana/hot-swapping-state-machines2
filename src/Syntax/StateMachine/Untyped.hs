@@ -21,9 +21,13 @@ data U
   | CaseU U U
   | (:.&&) U U
   | IncrU
+  | DecrU
   | ConsumeU
   | GetU
   | PutU
+  | IfU U U
+  | BoolU Bool
+  | NotU
   | ReadU Ty_
   | ShowU Ty_
   deriving (Show, Read)

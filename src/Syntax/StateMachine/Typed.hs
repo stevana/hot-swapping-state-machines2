@@ -3,6 +3,8 @@
 
 module Syntax.StateMachine.Typed where
 
+import Control.Category
+
 ------------------------------------------------------------------------
 
 infixr 2 `Case`
@@ -39,6 +41,11 @@ data T s a b where
   Read    :: Read a => T s String a
   Show    :: Show a => T s a String
 
+  Not :: T s Bool Bool
+  If  :: T s a b -> T s a b -> T s (a, Bool) b
+  Decr :: T s Int Int
+  Bool :: Bool -> T s a Bool -- XXX: why doesn't this work if the input type is ()?
+
   Unleft :: T s (Either a c) (Either b c) -> T s a b
 
   Eq  :: Eq a => T s (a, a) (Either () ())
@@ -52,9 +59,9 @@ deriving instance Show (T s a b)
 
 ------------------------------------------------------------------------
 
-infixr 1 >>>
-(>>>) :: T s a b -> T s b c -> T s a c
-f >>> g = g `Compose` f
+instance Category (T s) where
+  id = Id
+  (.) = Compose
 
 infixr 3 ***
 (***) :: T s a c -> T s b d -> T s (a, b) (c, d)

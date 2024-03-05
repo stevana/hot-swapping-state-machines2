@@ -74,7 +74,8 @@ typeCheck (ShowU _ua) _s a TString =
   case inferShow a of
     Just Witness -> return Show
     Nothing -> error "typeCheck: Show"
-typeCheck u s a b = error (show (u, s, a, b))
+typeCheck (BoolU bool) _s _ TBool = return (Bool bool)
+typeCheck u s a b = error ("typeCheck: " ++ show (u, s, a, b))
 
 ------------------------------------------------------------------------
 
@@ -140,6 +141,7 @@ inferI CopyU _s (TPair a a') =
 inferI SndU _s a = return (EI (TPair TDon'tCare a) Snd)
 inferI ConsumeU _s TUnit = return (EI TDon'tCare Consume)
 inferI IncrU _s TInt = return (EI TInt Incr)
+inferI DecrU _s TInt = return (EI TInt Decr)
 inferI (ShowU ua) _s TString = do
   case inferTy ua of
     ETy a -> case inferShow a of
@@ -150,4 +152,12 @@ inferI GetU s s' = case testEquality s s' of
    Nothing -> error $ "inferI: GetU: s=" ++ show s ++ ", s'= " ++ show s'
 inferI PutU s TUnit = return (EI s Put)
 inferI (IntU i) _s TInt = return (EI TUnit (Int i))
+inferI (IfU ut uf) s b = do
+  EI a  t <- inferI ut s b
+  EI a' f <- inferI uf s b
+  case testEquality a a' of
+    Just Refl -> return (EI (TPair a TBool) (If t f))
+    Nothing -> error "inferI: IfU"
+inferI (BoolU bool) _s TBool = return (EI TUnit (Bool bool))
+inferI NotU _s TBool = return (EI TBool Not)
 inferI u s a  = error ("inferI:" ++ show (u, s, a))

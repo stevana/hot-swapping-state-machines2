@@ -332,16 +332,14 @@ pattern IncrCountV1 :: InputV1
 pattern IncrCountV1 = Right ()
 
 counterV1 :: T Int String String
-counterV1 =
-  Read >>>
-  Get `Case` (Get >>> Incr >>> Put) >>>
-  Show
+counterV1 = Read >>> counterV1' >>> Show
+  where
+    counterV1' :: T Int InputV1 OutputV1
+    counterV1' = Get `Case` (Get >>> Incr >>> Put)
 ```
 
 Notice how the two operations' inputs and outputs are represented with an
-`Either` over which the `Case` operates. The counter does its own
-deserialisation and serialisation via `Read` and `Show`, we'll come back to why
-in a bit.
+`Either` over which the `Case` operates.
 
 ### Semantics
 
@@ -497,7 +495,8 @@ upgrades, which can easily be serialised and deserialised, and then use
 
 ```haskell
 data UpgradeData_ = UpgradeData_
-  { newState        :: Ty_
+  { oldState        :: Ty_
+  , newState        :: Ty_
   , newInput        :: Ty_
   , newOutput       :: Ty_
   , newStateMachine :: U
@@ -509,7 +508,7 @@ data UpgradeData_ = UpgradeData_
 We can to typecheck the above untyped upgrade into the following typed version.
 
 ```haskell
-data UpgradeData s a b = UpgradeData (T s a b) (T () s s)
+data UpgradeData s a b = forall s'. Typeable s' => UpgradeData (T s' a b) (T () s s')
 ```
 
 The way typechecking for upgrades work is basically the user needs to provide
@@ -520,15 +519,15 @@ against.
 
 ```haskell
 typeCheckUpgrade :: forall s a b. (Typeable s, Typeable a, Typeable b)
-                 => s -> T s a b -> UpgradeData_ -> Maybe (UpgradeData s a b)
-typeCheckUpgrade _s _f (UpgradeData_ s'_ a'_ b'_ f_ g_) =
-  case (inferTy s'_, inferTy a'_, inferTy b'_) of
-    (ETy (s' :: Ty s'), ETy (a' :: Ty a'), ETy (b' :: Ty b')) -> do
-      Refl <- eqT @a @a'
-      Refl <- eqT @b @b'
-      Refl <- eqT @s @s'
-      f <- typeCheck f_ s' a' b'
-      g <- typeCheck g_ TUnit s' s'
+                 => T s a b -> UpgradeData_ -> Maybe (UpgradeData s a b)
+typeCheckUpgrade _f (UpgradeData_ t_ t'_ a'_ b'_ f_ g_) =
+  case (inferTy t_, inferTy t'_, inferTy a'_, inferTy b'_) of
+    (ETy (t :: Ty t), ETy (t' :: Ty t'), ETy (a' :: Ty a'), ETy (b' :: Ty b')) -> do
+      Refl <- decT @a @a'
+      Refl <- decT @b @b'
+      Refl <- decT @s @t
+      f <- typeCheck f_ t' a' b'
+      g <- typeCheck g_ TUnit t t'
       return (UpgradeData f g)
 ```
 Where untyped types are defined as follows:
@@ -666,14 +665,14 @@ input and output types.
 type InputV2  = Either () InputV1
 type OutputV2 = Either () OutputV1
 
+pattern ResetCountV2 :: InputV2
+pattern ResetCountV2 = Left ()
+
 pattern ReadCountV2 :: InputV2
-pattern ReadCountV2  = Left ()
+pattern ReadCountV2  = Right ReadCountV1
 
 pattern IncrCountV2 :: InputV2
-pattern IncrCountV2  = Right (Left ())
-
-pattern ResetCountV2 :: InputV2
-pattern ResetCountV2 = Right (Right ())
+pattern IncrCountV2  = Right IncrCountV1
 ```
 
 The state machine looks the same, except for the last `Case` where we update the
@@ -681,8 +680,13 @@ state to be `0`, thus resetting the counter.
 
 ```haskell
 counterV2 :: T Int String String
-counterV2 =
-  Read >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
+counterV2 = Read >>> counterV2' >>> Show
+  where
+    counterV2' :: T Int InputV2 OutputV2
+    counterV2' =
+      (Int 0 >>> Put) `Case`
+      Get `Case`
+      (Get >>> Incr >>> Put)
 ```
 
 Back in our REPL we can now do the upgrade, by sending over a type `erase`d
@@ -691,7 +695,7 @@ version of `counterV2`.
 ```haskell
 let msg :: Msg ()
     msg = Upgrade Nothing "counter"
-            (UpgradeData_ UTInt UTInt UTString UTString (erase counterV2) IdU)
+            (UpgradeData_ UTInt UTInt UTString UTString (erase counterV2) (erase Id))
 nc "127.0.0.1" 3000 msg
 
 nc "127.0.0.1" 3000 (Item Nothing (show ReadCountV2))
@@ -703,12 +707,119 @@ Which yields the following annotated output.
 
 ```
 UpgradeSucceeded "counter"
-Item "Left 2"              -- The counter's state is preserved by the upgrade.
-Item "Right (Right ())"    -- Reset the counter.
-Item "Left 0"              -- The value is back to 0.
+Item "Right (Left 2)"   -- The counter's state is preserved by the upgrade.
+Item "Left ()"          -- Reset the counter.
+Item "Right (Left 0)"   -- The value is back to 0.
+```
+
+As a final example of an upgrade, let's do a more interesting state migration.
+Let's say we want to add a boolean to the state which determines if `IncrCount`
+should add by `1` or `-1` (i.e. decrement). This boolean can be toggled by the
+user using a new operation, while the signatures of the other operations stay
+the same as before.
+
+```haskell
+type InputV3  = Either () InputV2
+type OutputV3 = Either () OutputV2
+
+pattern ToggleCountV3 :: InputV3
+pattern ToggleCountV3 = Left ()
+
+pattern ReadCountV3, IncrCountV3, ToggleCountV3 :: InputV3
+```
+
+In order to implement the toggle operation we need to extend the syntax of our
+state machines to be able to deal with booleans and products (the details can be
+found
+[here](https://github.com/stevana/hot-swapping-state-machines2/blob/main/src/Interpreter.hs)).
+
+```haskell
+counterV3 :: T (Int, Bool) String String
+counterV3 = Read >>> counterV3' >>> Show
+  where
+    counterV3' :: T (Int, Bool) InputV3 OutputV3
+    counterV3' =
+      -- Toggle negates the boolean in the state (the second component).
+      (Get >>> Second Not >>> Put) `Case`
+      -- Reset resets the counter and the boolean back to false (i.e. incrementing).
+      (Int 0 :&&& Bool False >>> Put) `Case`
+      -- Reading the counter picks out the first component from the state.
+      (Get >>> Fst) `Case`
+      -- Incrementing or decrementing, depending on the boolean in the state.
+      (Get >>> If Decr Incr >>> (Id :&&& (Consume >>> Get >>> Snd)) >>> Put)
+```
+
+We can then upgrade to our new version of the counter as follows.
+
+```haskell
+  let msg2 :: Msg ()
+      msg2 = Upgrade_ "counter"
+               (UpgradeData_ UTInt (UTPair UTInt UTBool) UTString UTString
+                 (erase counterV3) (erase (Id :&&& Bool False)))
+  nc "127.0.0.1" 3000 msg2
+```
+
+Notice how the state is migrated using `Id :&&& Bool False`, i.e. create a pair
+where the first component is the old value of the state (this is the current
+count) and the second component is `False` (this is whether we are decrementing).
+
+Here's a final example of how we can use the new counter.
+
+```haskell
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ToggleCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+```
+
+The above yields the following output.
+
+```
+UpgradeSucceeded "counter"
+Item "Right (Right (Left 0))"   -- The counter is 0.
+Item "Right (Right (Right ()))" -- Two increments.
+Item "Right (Right (Right ()))"
+Item "Right (Right (Left 2))"   -- The counter is 2.
+Item "Left ()"                  -- Toggle to decrementing.
+Item "Right (Right (Right ()))" -- Decrement.
+Item "Right (Right (Left 1))"   -- The value is 1.
 ```
 
 ## Discussion and future work
+
+XXX:
+
+If we look back at the list, from the introduction, of properties that we wanted
+from our upgrades, then I hope that I've managed to provide a glimpse of a
+possible way of achieving zero-downtime upgrades with type-safe state migrations
+that are atomic.
+
+Downgrades can be thought of as an upgrade to an earlier version, although it
+could be interesting to experiment with requiring an inverse function to the
+state migration as part of an upgrade. That way the system itself could
+downgrade in case there's more than N errors within some time period, or
+something like that.
+
+I didn't talk about backwards and forwards compatibility. We could probably use
+an
+[interface_description_language](https://en.wikipedia.org/wiki/Interface_description_language),
+such as Avro or Protobuf, but it could also be interesting see if we could add
+input and output migrations as part of upgrades (in addition to state
+migrations). Especially in conjuction with being able to derive them generically
+and
+[automatically](https://www.manuelbaerenz.de/essence-of-live-coding/EssenceOfLiveCoding.pdf)
+from the schema change.
+
+There's also a bunch of other things that I thought of while working on this,
+which I don't have any good answers for yet.
+
+If you feel that I'm missing something, or if any of these problems sound
+interesting to work on, please do feel free to get in touch!
+
+Let me leave you with one closing though:
 
 Wouldn't it be neat if the programming language environment (compiler/REPL?)
 could keep track of what's deployed where and only allow us to upgrade it
@@ -716,110 +827,12 @@ without downtime and without breaking forwards or backwards compatibility? (Or
 at least give us a stern warning and let us proceed in cases we really wanted to
 break things.)
 
-While there's still a lot to do in order to get proper support for upgrades of
-stateful systems, I hope that I've managed to provide a glimpse of a possible
-way of going about doing it, at least if one content with writing state machines.
+Another way to think of it is typechecking across versions of code, as opposed
+to merely typechecking a version of the code in isolation of the rest.
 
-Here are a bunch of things I've thought of, but not done yet:
-
-1. Notice how the type of `counterV1` and `counterV2` is the same. I think the
-   input and output types perhaps need to stay the same, otherwise we wouldn't
-   be able to perform the upgrade in the `deploy` function because the types of
-   the input and output queues cannot change (that's why we set them both to be
-   `String` and made deserialisation and serialisation part of the upgrade, thus
-   allowing for changes in the inputs and outputs). I think that the state type
-   is different though, and we should be able to change that during an upgrade;
-2. To support backwards compatibility we'd need to extend the notion of upgrade
-   with an input upgrade function (upgrading old inputs to new inputs) and an
-   output downgrade function (taking new outputs to old outputs), like we
-   discussed in the introduction;
-3. For forward compatibility we'd need a way for an old server to ignore the new
-   stuff that was added to an input. One way to achieve this could be to define
-   a function on types, which annotates the input with extra constructors or
-   parameters to existing constructors, etc, then the server could ignore these
-   extra annotations. We'd also need default values for anything that is added
-   to the outputs, so that the servers old output can be upgraded to the new
-   output that the new client expects.
-
-   Alternatively clients can be made to support multiple versions and establish
-   which version to use in the initial handshake with the server, this is
-   arguably not as satisfying of a solution though;
-4. We've seen upgrades of state machines running on top of pipelines, but what
-   if we wanted to change the pipelines themselves? This seems trickier. Perhaps
-   can start by thinking about what kind of changes one would like to allow,
-   e.g. prepending or appending something to a pipeline seems easier than
-   changing some part in the middle?
-5. The state machine are represented by first-order datatypes, that get
-   typechecked and then interpreted. What would upgrades look like if we wanted
-   to state machines to be compiled rather than interpreted? For some prior work
-   in Haskell see the repos
-   [`haskell-hot-swap`](https://github.com/nmattia/haskell-hot-swap) and
-   [`ghc-hotswap`](https://github.com/fbsamples/ghc-hotswap/);
-6. Writing state machines and pipelines using combinators is not fun, can we
-   have something like Haskell's arrow syntax at the very least? C.f. Conal
-   Elliott's [*Compiling to
-   categories*](http://conal.net/papers/compiling-to-categories/) and Oleg
-   Grenrus'
-   [*Overloaded.Categories*](https://hackage.haskell.org/package/overloaded-0.3.1/docs/Overloaded-Categories.html);
-7. One advantage with the combinators is that they don't contain variables, so
-   it should be easier to do something like Unison does with content-addressed
-   hashes?
-8. On the pipeline level we might want to support multiple sources
-   (`Alternative` instance?), multiple sinks (perhaps via something like `Tee ::
-   P a b -> Sink a () -> P a b`?), fanout and sharding as well as making
-   everything efficient (as I've written about
-   [earlier](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html));
-9. Finally we also need to figure out how to we build something more
-   complicated, like a HTTP-based API, on top of the TCP stuff. Scott Wlaschin's
-   ["pipeline-oriented
-   programming"](https://www.youtube.com/watch?v=ipceTuJlw-M) approach can be
-   useful here.
-
-If you feel that I'm missing something, or if any of the above sounds
-interesting to work on, please do feel free to get in touch!
-
-## Running the code
-
-The easiest way to get the code running is probably using the [Nix package
-manager](https://nixos.org/download).
-
-```bash
-git clone https://github.com/stevana/hot-swapping-state-machines2.git
-cd hot-swapping-state-machines2
-nix-shell
-cabal repl
-```
-
-Although using [GHCup](https://www.haskell.org/ghcup/) should work too, if you
-replace `nix-shell` with `ghcup install ghc 9.8.1`.
-
-## See also
-
-* For many more examples of sources and sinks, see
-  [Benthos](https://www.benthos.dev/);
-* We haven't discussed any security aspects of upgrades, for more on this topic
-  see [TUF](https://en.wikipedia.org/wiki/The_Update_Framework);
-* As I was writing up I found this old post about hot-swapping in
-  [Elm](https://elm-lang.org/news/interactive-programming) (2013). It's even
-  more interesting considering that in Elm one is basically writing a state
-  machine;
-* Gregor Hohpe gave a talk called [Application architecture as
-  code](https://www.youtube.com/watch?v=vasvpFRPx9c) at AWS re:Invent 2023,
-  where he also describes pipelines as code which later gets deployed to AWS. He
-  doesn't mention upgrades, but surely they must have thought about it? He also
-  wrote about the topic [here](https://architectelevator.com/cloud/iac-ifc-trends/);
-* I've written about upgrading state machines only (as opposed to pipelines with
-  state machines in them) in an earlier
-  [post](https://stevana.github.io/hot-code_swapping_a_la_erlang_with_arrow-based_state_machines.html)
-  (2023). I consider this post a successor of the earlier approach, but the old
-  post still contains some aspects that can be useful and not covered here;
-* For non-linear pipelines and a more efficient implementation of them, see my
-  older post called [Parallel stream processing with zero-copy fan-out and
-  sharding](https://stevana.github.io/parallel_stream_processing_with_zero-copy_fan-out_and_sharding.html)
-  (2024);
-* Backwards and forwards compatibility is also related to schema evolution,
-  which I've written more about
-  [here](https://stevana.github.io/working_with_binary_data.html) (2023).
+In a world where software systems are expected to evolve over time, this seems
+like our programming languages should also be helping us with upgrades, don't
+you think?
 
 
 [^1]: State machines might seem like low-level clumsy way of programming, but

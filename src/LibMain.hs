@@ -42,6 +42,19 @@ test = do
   nc "127.0.0.1" 3000 (Item_ (show ResetCountV2))
   nc "127.0.0.1" 3000 (Item_ (show ReadCountV2))
 
+  let msg2 :: Msg ()
+      msg2 = Upgrade_ "counter"
+               (UpgradeData_ UTInt (UTPair UTInt UTBool) UTString UTString counterV3U (IdU :.&& BoolU False))
+  nc "127.0.0.1" 3000 msg2
+
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ToggleCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+
 delayTest :: IO ()
 delayTest = do
   let port = 3000

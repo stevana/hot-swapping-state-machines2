@@ -32,6 +32,10 @@ eval (f :&&& g)    = \x -> (,) <$> eval f x <*> eval g x
 eval (Case f g)    = either (fmap Left . eval f) (fmap Right . eval g)
 eval Read          = return . read
 eval Show          = return . show
+eval (If t f)      = \(x, b) -> if b then eval t x else eval f x
+eval (Bool b)      = return . const b
+eval Decr          = return . pred
+eval Not           = return . not
 eval (Unleft f)    = go . Left
   where
     go = either return (go . Right) <=< eval f

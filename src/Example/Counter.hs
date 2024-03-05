@@ -2,7 +2,9 @@
 
 module Example.Counter where
 
-import Syntax.StateMachine.Typed hiding (Consume, Fst, Snd, Copy, First, Second)
+import Control.Category
+
+import Syntax.StateMachine.Typed hiding (Copy, First)
 import Syntax.StateMachine.Untyped
 import Syntax.Types
 
@@ -19,10 +21,11 @@ pattern IncrCountV1 = Right ()
 
 ------------------------------------------------------------------------
 
+counterV1' :: T Int InputV1 OutputV1
+counterV1' = Get `Case` (Get >>> Incr >>> Put)
+
 counterV1 :: T Int String String
-counterV1 = -- Loop (Second (Delay 0) >>>
-  -- Distr >>> ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& Incr))) >>> Distr'
-  Read >>> Get `Case` (Get >>> Incr >>> Put) >>> Show
+counterV1 = Read >>> counterV1' >>> Show
 
 inputV1 :: Ty_
 inputV1 = UTEither UTUnit UTUnit
@@ -31,10 +34,7 @@ outputV1 :: Ty_
 outputV1 = UTEither UTInt UTUnit
 
 counterV1U :: U
-counterV1U = -- LoopU UTInt $ SecondU (DelayU UTInt (Opaque (unsafeCoerce 0))) .>>
-  -- DistrU .>>
-  -- ((SndU .>> CopyU) :.++ (SndU .>> (ConsumeU :.&& IncrU)))
-  -- .>> DistrU'
+counterV1U =
   ReadU inputV1 .>> (GetU `CaseU` (GetU .>> IncrU .>> PutU)) .>> ShowU outputV1
 
 ------------------------------------------------------------------------
@@ -42,58 +42,72 @@ counterV1U = -- LoopU UTInt $ SecondU (DelayU UTInt (Opaque (unsafeCoerce 0))) .
 type InputV2  = Either () InputV1
 type OutputV2 = Either () OutputV1
 
+counterV2' :: T Int InputV2 OutputV2
+counterV2' =
+  (Int 0 >>> Put) `Case`
+  Get `Case`
+  (Get >>> Incr >>> Put)
+
 counterV2 :: T Int String String
-counterV2 = -- Loop $ Second (Delay 0) >>>
-  -- distr2 >>>
-  -- ((Snd >>> Copy) :+++ (Snd >>> (Consume :&&& (Incr >>> Incr)))) :+++ (Consume :&&& (Int 0))
-  -- >>> distr2'
-  Read >>> (Get `Case` (Get >>> Incr >>> Put) `Case` (Int 0 >>> Put)) >>> Show
-
-pattern ReadCountV2 :: InputV2
-pattern ReadCountV2  = Left ()
-
-pattern IncrCountV2 :: InputV2
-pattern IncrCountV2  = Right (Left ())
+counterV2 = Read >>> counterV2' >>> Show
 
 pattern ResetCountV2 :: InputV2
-pattern ResetCountV2 = Right (Right ())
+pattern ResetCountV2 = Left ()
+
+pattern ReadCountV2 :: InputV2
+pattern ReadCountV2  = Right ReadCountV1
+
+pattern IncrCountV2 :: InputV2
+pattern IncrCountV2  = Right IncrCountV1
 
 inputV2 :: Ty_
-inputV2 = UTEither UTUnit (UTEither UTUnit UTUnit)
+inputV2 = UTEither UTUnit inputV1
 
 outputV2 :: Ty_
-outputV2 = UTEither UTInt (UTEither UTUnit UTUnit)
+outputV2 = UTEither UTUnit outputV1
 
 counterV2U :: U
 counterV2U =
-  ReadU inputV2 .>> (GetU `CaseU` (GetU .>> IncrU .>> PutU) `CaseU` (IntU 0 .>> PutU)) .>> ShowU outputV2
-
-  {-
-distr2 :: T (Either (Either a b) c, d) (Either (Either (a, d) (b, d)) (c, d))
-distr2 = Distr >>> (Distr :+++ Id)
-
-distr2' :: T (Either (Either (a, d) (b, d)) (c, d)) (Either (Either a b) c, d)
-distr2' = (Distr' :+++ Id) >>> Distr'
--}
-
-
-  {-
-data Input = ReadCount | IncrCount
-  deriving Read
-data Output = Count Int | Ok
-  deriving Show
-
-counter :: Input  -> Int -> (Int, Output)
-counter ReadCount n = (n, Count n)
-counter IncrCount n = (n + 1, Ok)
-
-counter2 :: Input  -> (Int, Int) -> ((Int, Int), Output)
-counter2 ReadCount (old, new) = ((old, new), Count new)
-counter2 IncrCount (old, new) = ((old, new + 2), Ok)
-
--}
+  ReadU inputV2 .>> ((IntU 0 .>> PutU) `CaseU` GetU `CaseU` (GetU .>> IncrU .>> PutU)) .>> ShowU outputV2
 
 ------------------------------------------------------------------------
 
--- XXX: V3 add bool to state, if bool is true then incr decrements, also add
--- command that allows for bool to be flipped.
+type InputV3  = Either () InputV2
+type OutputV3 = Either () OutputV2
+
+counterV3' :: T (Int, Bool) InputV3 OutputV3
+counterV3' =
+  (Get >>> Second Not >>> Put) `Case`
+  (Int 0 :&&& Bool False >>> Put) `Case`
+  (Get >>> Fst) `Case`
+  (Get >>> If Decr Incr >>> (Id :&&& (Consume >>> Get >>> Snd)) >>> Put)
+
+counterV3 :: T (Int, Bool) String String
+counterV3 = Read >>> counterV3' >>> Show
+
+pattern ToggleCountV3 :: InputV3
+pattern ToggleCountV3 = Left ()
+
+pattern ResetCountV3 :: InputV3
+pattern ResetCountV3 = Right ResetCountV2
+
+pattern ReadCountV3 :: InputV3
+pattern ReadCountV3  = Right ReadCountV2
+
+pattern IncrCountV3 :: InputV3
+pattern IncrCountV3  = Right IncrCountV2
+
+inputV3 :: Ty_
+inputV3 = UTEither UTUnit inputV2
+
+outputV3 :: Ty_
+outputV3 = UTEither UTUnit outputV2
+
+counterV3U :: U
+counterV3U =
+  ReadU inputV3 .>>
+    ((GetU .>> SecondU NotU .>> PutU) `CaseU`
+    ((IntU 0 :.&& BoolU False) .>> PutU) `CaseU`
+    (GetU .>> FstU) `CaseU`
+    (GetU .>> IfU DecrU IncrU .>> (IdU :.&& (ConsumeU .>> GetU .>> SndU)) .>> PutU))
+  .>> ShowU outputV3
