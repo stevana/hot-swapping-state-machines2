@@ -3,7 +3,7 @@
 *Work in progress, please don't share, but do feel free to get involved!*
 
 In this post I'd like to explore one possible way we might be able to achieve
-zero-downtime upgrades of stateful systems.
+zero-downtime upgrades of stateful systems in the future.
 
 ## Motivation
 
@@ -288,8 +288,11 @@ In the rest of this section we'll try to fleshing out details of the above.
 
 ### State machines
 
-Typed state machines are represented using a datatype parametrised by the
-state, `s`, and indexed by its input type, `a`, and output type `b`[^4].
+Typed state machines are represented using a datatype parametrised by the state,
+`s`, and indexed by its input type, `a`, and output type `b`[^4]. For example
+the `Id`entity state machine has the same input and output type, while if we
+want to `Compose` to state machines then output type of the first needs to be
+the same as the input type of the second, and so on.
 
 ```haskell
 data T s a b where

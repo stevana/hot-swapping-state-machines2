@@ -1,8 +1,11 @@
 1. Notice how the type of the inputs and outputs of our counters is always
    `String`, i.e. the counter does its own deserialisation and serialisation via
    `Read` and `Show`. I don't quite see how we can implement `deploy` if we
-   didn't do the parsing as part of the state machine, because the types of
-   the input and output queues cannot change?
+   didn't do the parsing as part of the state machine, because the types of the
+   input and output queues cannot change? The fact that the state machines does
+   its own parsing isn't so bad if we only have one state machine in our
+   pipeline, but as we start pipelining them and we want to be able to upgrade
+   them individually then it becomes a problem.
 2. Related to above and perhaps the solution is: what if we wanted to change the
    pipelines themselves (as opposed to the state machines in them)? This seems
    trickier. Perhaps can start by thinking about what kind of changes one would
