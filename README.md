@@ -1,10 +1,5 @@
 # Towards zero-downtime upgrades of stateful systems
 
-*Work in progress, please don't share, but do feel free to get involved!*
-
-In this post I'd like to explore one possible way we might be able to achieve
-zero-downtime upgrades of stateful systems in the future.
-
 ## Motivation
 
 Most deployed programs need to be upgraded at some point. The reasons vary from
@@ -758,7 +753,7 @@ We can then upgrade to our new version of the counter as follows.
 
 ```haskell
   let msg2 :: Msg ()
-      msg2 = Upgrade_ "counter"
+      msg2 = Upgrade Nothing "counter"
                (UpgradeData_ UTInt (UTPair UTInt UTBool) UTString UTString
                  (erase counterV3) (erase (Id :&&& Bool False)))
   nc "127.0.0.1" 3000 msg2
@@ -771,13 +766,13 @@ count) and the second component is `False` (this is whether we are decrementing)
 Here's a final example of how we can use the new counter.
 
 ```haskell
-  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show ToggleCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show IncrCountV3))
-  nc "127.0.0.1" 3000 (Item_ (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show ReadCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show ToggleCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show IncrCountV3))
+  nc "127.0.0.1" 3000 (Item Nothing (show ReadCountV3))
 ```
 
 The above yields the following output.
@@ -818,9 +813,9 @@ from the schema change.
 There's also a bunch of other
 [things](https://github.com/stevana/hot-swapping-state-machines2/blob/main/TODO.md)
 that I thought of while working on this, which I don't have any good answers for
-yet. If you feel that I'm missing something, or if any of these problems sound
-interesting to work on, please do feel free to get in
-[touch](https://stevana.github.io/about.html)!
+yet. If you feel that I'm missing something, or if you know some answers or if
+any of these problems sound interesting to work on, please do feel free to get
+in [touch](https://stevana.github.io/about.html)!
 
 Let me close by trying to tie it back to Barbara Liskov's remark about the need
 for more complete programming languages. In a world where software systems are
