@@ -507,7 +507,8 @@ data UpgradeData_ = UpgradeData_
 We can to typecheck the above untyped upgrade into the following typed version.
 
 ```haskell
-data UpgradeData s a b = forall s'. Typeable s' => UpgradeData (T s' a b) (T () s s')
+data UpgradeData s a b = forall s'. Typeable s' =>
+  UpgradeData (T s' a b) (T () s s')
 ```
 
 The way typechecking for upgrades work is basically the user needs to provide
@@ -675,7 +676,7 @@ pattern IncrCountV2 :: InputV2
 pattern IncrCountV2  = Right IncrCountV1
 ```
 
-The state machine looks the same, except for the last `Case` where we update the
+The state machine looks the same, except for the first `Case` where we update the
 state to be `0`, thus resetting the counter.
 
 ```haskell
